@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "353282297748",
+    "project_id": "messeya-chat-6fec8",
+    "storage_bucket": "messeya-chat-6fec8.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:353282297748:android:1fb00eb58a9d627d2a8981",
+        "android_client_info": {
+          "package_name": "com.messeya.chat"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "353282297748-no8n9qd0t6edpc3891gtntohgoiu8cf8.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.messeya.chat",
+            "certificate_hash": "4f067f71cf96e4cae9d151530d6ae963acf81d59"
+          }
+        },
+        {
+          "client_id": "353282297748-us0kv56cnbu9s4tbgtipk5qsq126br50.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCo1GmzrN0ArG5Yyy-sxz8scX1iR71cy70"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "353282297748-us0kv56cnbu9s4tbgtipk5qsq126br50.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

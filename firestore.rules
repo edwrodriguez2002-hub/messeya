@@ -1,0 +1,234 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function linkedOwnerUid() {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/desktop_clients/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/desktop_clients/$(request.auth.uid)).data.status == 'active'
+          ? get(/databases/$(database)/documents/desktop_clients/$(request.auth.uid)).data.ownerUid
+          : '';
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isChatMember(chatId) {
+      return isSignedIn() &&
+        (
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members ||
+          (
+            linkedOwnerUid() != '' &&
+            linkedOwnerUid() in get(/databases/$(database)/documents/chats/$(chatId)).data.members
+          )
+        );
+    }
+
+    function canSendToChat(chatId) {
+      return isChatMember(chatId) &&
+        canPassDirectRequest(chatId) && (
+          !(get(/databases/$(database)/documents/chats/$(chatId)).data.onlyAdminsCanPost == true) ||
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.adminIds ||
+          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.moderatorIds
+        );
+    }
+
+    function canPassDirectRequest(chatId) {
+      return (
+        get(/databases/$(database)/documents/chats/$(chatId)).data.type != 'direct' ||
+        get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestStatus == 'accepted' ||
+        request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestRecipientId ||
+        (
+          request.auth.uid == get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestInitiatorId &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestStatus == 'pending' &&
+          get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestSentCount <
+            get(/databases/$(database)/documents/chats/$(chatId)).data.directMessageRequestLimit
+        )
+      );
+    }
+
+    match /users/{userId} {
+      allow read: if isSignedIn();
+      allow create: if isOwner(userId);
+      allow update: if isOwner(userId);
+      allow delete: if false;
+
+      match /blocked_users/{blockedUserId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /hidden_status_contacts/{contactId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /trusted_contacts/{contactId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+
+      match /linked_devices/{deviceId} {
+        allow read, create, update, delete: if isOwner(userId);
+      }
+    }
+
+    match /device_pairing_sessions/{sessionId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.creatorUid == request.auth.uid;
+      allow read: if isSignedIn() &&
+        (
+          resource.data.creatorUid == request.auth.uid ||
+          resource.data.ownerUid == request.auth.uid
+        );
+      allow update: if isSignedIn() &&
+        (
+          resource.data.creatorUid == request.auth.uid ||
+          request.resource.data.ownerUid == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /desktop_clients/{clientId} {
+      allow create, update: if isSignedIn() &&
+        (
+          request.resource.data.creatorUid == request.auth.uid ||
+          request.resource.data.ownerUid == request.auth.uid
+        );
+      allow read: if isSignedIn() &&
+        (
+          clientId == request.auth.uid ||
+          resource.data.ownerUid == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /usernames/{username} {
+      allow read: if isSignedIn();
+      allow create, update: if isSignedIn() &&
+        request.resource.data.uid == request.auth.uid;
+      allow delete: if isSignedIn() &&
+        resource.data.uid == request.auth.uid;
+    }
+
+    match /statuses/{statusId} {
+      allow read: if isSignedIn();
+      allow create: if isSignedIn() &&
+        request.resource.data.userId == request.auth.uid;
+      allow update: if isSignedIn();
+      allow delete: if isSignedIn() &&
+        resource.data.userId == request.auth.uid;
+    }
+
+    match /chats/{chatId} {
+      allow read: if isChatMember(chatId);
+      allow create: if isSignedIn() &&
+        request.resource.data.members is list &&
+        request.auth.uid in request.resource.data.members;
+      allow update: if isChatMember(chatId);
+      allow delete: if false;
+
+      match /messages/{messageId} {
+        allow read: if isChatMember(chatId);
+        allow create: if canSendToChat(chatId) &&
+          request.resource.data.senderId == request.auth.uid;
+        allow update: if isChatMember(chatId);
+        allow delete: if false;
+      }
+    }
+
+    match /users/{userId}/call_logs/{callLogId} {
+      allow read: if isOwner(userId);
+      allow create: if isSignedIn();
+      allow update: if isOwner(userId);
+      allow delete: if false;
+    }
+
+    match /users/{userId}/incoming_calls/{callId} {
+      allow read, update: if isOwner(userId);
+      allow create: if isSignedIn();
+      allow delete: if false;
+    }
+
+    match /users/{userId}/active_call/{callId} {
+      allow read, update: if isOwner(userId);
+      allow create: if isSignedIn();
+      allow delete: if false;
+    }
+
+    match /calls/{callId} {
+      allow read, update: if isSignedIn() &&
+        (
+          request.auth.uid == resource.data.callerUid ||
+          request.auth.uid == resource.data.calleeUid
+        );
+      allow create: if isSignedIn() &&
+        (
+          request.resource.data.callerUid == request.auth.uid ||
+          request.resource.data.calleeUid == request.auth.uid
+        );
+      allow delete: if false;
+
+      match /callerCandidates/{candidateId} {
+        allow read, create: if isSignedIn();
+        allow update, delete: if false;
+      }
+
+      match /calleeCandidates/{candidateId} {
+        allow read, create: if isSignedIn();
+        allow update, delete: if false;
+      }
+    }
+
+    match /reports/{reportId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.reporterId == request.auth.uid;
+      allow read, update, delete: if false;
+    }
+
+    match /email_login_challenges/{challengeId} {
+      allow create, read, update: if isSignedIn() &&
+        challengeId == request.auth.uid &&
+        (
+          request.method != 'create' ||
+          request.resource.data.uid == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /media_cleanup_jobs/{jobId} {
+      allow create, read, update: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid;
+      allow delete: if false;
+    }
+
+    match /hybrid_gateway_packets/{packetId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.relayedByUserId == request.auth.uid;
+      allow read: if isSignedIn() &&
+        (
+          resource.data.recipientId == request.auth.uid ||
+          resource.data.originalSenderId == request.auth.uid ||
+          resource.data.relayedByUserId == request.auth.uid
+        );
+      allow update: if isSignedIn() &&
+        (
+          resource.data.recipientId == request.auth.uid ||
+          resource.data.relayedByUserId == request.auth.uid
+        );
+      allow delete: if false;
+    }
+
+    match /desktop_outbox/{itemId} {
+      allow create: if isSignedIn() &&
+        request.resource.data.creatorUid == request.auth.uid;
+      allow read, update: if isSignedIn() &&
+        (
+          resource.data.creatorUid == request.auth.uid ||
+          resource.data.ownerUid == request.auth.uid
+        );
+      allow delete: if false;
+    }
+  }
+}
