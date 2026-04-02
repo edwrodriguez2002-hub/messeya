@@ -17,10 +17,35 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == uid;
     }
 
+    function isCompanyMember(companyId) {
+      return isSignedIn() &&
+        exists(/databases/$(database)/documents/companies/$(companyId)) &&
+        request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)).data.memberIds;
+    }
+
+    function companyPlanActive(companyId) {
+      return exists(/databases/$(database)/documents/companies/$(companyId)) &&
+        (
+          get(/databases/$(database)/documents/companies/$(companyId)).data.planStatus == 'active' ||
+          get(/databases/$(database)/documents/companies/$(companyId)).data.planStatus == 'trial' ||
+          get(/databases/$(database)/documents/companies/$(companyId)).data.planStatus == 'grace'
+        );
+    }
+
     function isChatMember(chatId) {
       return isSignedIn() &&
         (
-          request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members ||
+          (
+            request.auth.uid in get(/databases/$(database)/documents/chats/$(chatId)).data.members &&
+            (
+              !(get(/databases/$(database)/documents/chats/$(chatId)).data.scope == 'company') ||
+              (
+                get(/databases/$(database)/documents/chats/$(chatId)).data.companyId is string &&
+                isCompanyMember(get(/databases/$(database)/documents/chats/$(chatId)).data.companyId) &&
+                companyPlanActive(get(/databases/$(database)/documents/chats/$(chatId)).data.companyId)
+              )
+            )
+          ) ||
           (
             linkedOwnerUid() != '' &&
             linkedOwnerUid() in get(/databases/$(database)/documents/chats/$(chatId)).data.members
@@ -74,6 +99,31 @@ service cloud.firestore {
       }
     }
 
+    match /companies/{companyId} {
+      allow read: if isCompanyMember(companyId);
+      allow create: if isSignedIn() &&
+        request.resource.data.ownerId == request.auth.uid &&
+        request.auth.uid in request.resource.data.memberIds;
+      allow update: if isCompanyMember(companyId) &&
+        request.auth.uid in resource.data.adminIds;
+      allow delete: if false;
+
+      match /members/{userId} {
+        allow read: if isCompanyMember(companyId);
+        allow create, update: if isCompanyMember(companyId) &&
+          (
+            request.auth.uid == userId ||
+            request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)).data.adminIds
+          );
+        allow delete: if isCompanyMember(companyId) &&
+          request.auth.uid in get(/databases/$(database)/documents/companies/$(companyId)).data.adminIds;
+      }
+    }
+
+    match /company_billing/{companyId} {
+      allow read, create, update, delete: if false;
+    }
+
     match /device_pairing_sessions/{sessionId} {
       allow create: if isSignedIn() &&
         request.resource.data.creatorUid == request.auth.uid;
@@ -125,7 +175,15 @@ service cloud.firestore {
       allow read: if isChatMember(chatId);
       allow create: if isSignedIn() &&
         request.resource.data.members is list &&
-        request.auth.uid in request.resource.data.members;
+        request.auth.uid in request.resource.data.members &&
+        (
+          !(request.resource.data.scope == 'company') ||
+          (
+            request.resource.data.companyId is string &&
+            isCompanyMember(request.resource.data.companyId) &&
+            companyPlanActive(request.resource.data.companyId)
+          )
+        );
       allow update: if isChatMember(chatId);
       allow delete: if false;
 

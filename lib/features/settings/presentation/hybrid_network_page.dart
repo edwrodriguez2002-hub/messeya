@@ -119,8 +119,9 @@ class _HybridNetworkPageState extends ConsumerState<HybridNetworkPage> {
                       }
                     },
                     title: const Text('Activar red hibrida'),
-                    subtitle:
-                        const Text('Permite mensajeria cercana sin internet.'),
+                    subtitle: const Text(
+                      'Permite mensajeria cercana sin internet usando Nearby sobre Bluetooth/P2P.',
+                    ),
                   ),
                   SwitchListTile.adaptive(
                     contentPadding: EdgeInsets.zero,
@@ -128,7 +129,7 @@ class _HybridNetworkPageState extends ConsumerState<HybridNetworkPage> {
                     onChanged: null,
                     title: const Text('Nodo puente siempre activo'),
                     subtitle: const Text(
-                      'Mientras la red hibrida este encendida, este dispositivo puede reenviar paquetes cercanos sin mostrar avisos dentro de la app.',
+                      'Mientras la red hibrida este encendida, este dispositivo puede reenviar paquetes cercanos por Bluetooth/P2P sin mostrar avisos dentro de la app.',
                     ),
                   ),
                   SwitchListTile.adaptive(

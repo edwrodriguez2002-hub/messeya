@@ -1,7 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/firebase/firebase_providers.dart';
 import '../../../../shared/models/chat.dart';
 import '../../../../shared/widgets/async_value_widget.dart';
 import '../../../../shared/widgets/messeya_ui.dart';
@@ -53,6 +55,7 @@ class _HomeChatsTabState extends ConsumerState<HomeChatsTab> {
                   actions: [
                     MesseyaRoundIconButton(
                       icon: Icons.search_rounded,
+                      tooltip: 'Buscar',
                       onTap: isDesktopLinked
                           ? null
                           : () => context.push('/search'),
@@ -62,6 +65,17 @@ class _HomeChatsTabState extends ConsumerState<HomeChatsTab> {
                       icon: const Icon(Icons.more_vert_rounded,
                           color: Colors.white),
                       onSelected: (value) async {
+                        // Capturamos el router antes del delay
+                        final router = GoRouter.of(context);
+                        final authRepo = ref.read(authRepositoryProvider);
+                        
+                        await Future.delayed(const Duration(milliseconds: 150));
+                        if (!mounted) return;
+
+                        if (value == 'contacts') {
+                          context.push('/contacts');
+                          return;
+                        }
                         if (value == 'archived') {
                           context.push('/archived-chats');
                           return;
@@ -84,13 +98,13 @@ class _HomeChatsTabState extends ConsumerState<HomeChatsTab> {
                         }
                         if (value != 'logout') return;
                         try {
-                          await ref.read(authRepositoryProvider).signOut();
-                          if (context.mounted) {
+                          await authRepo.signOut();
+                          if (mounted) {
                             context.go(
                                 isDesktopLinked ? '/desktop-link' : '/login');
                           }
                         } catch (error) {
-                          if (context.mounted) {
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
@@ -104,6 +118,10 @@ class _HomeChatsTabState extends ConsumerState<HomeChatsTab> {
                         }
                       },
                       itemBuilder: (context) => [
+                        const PopupMenuItem<String>(
+                          value: 'contacts',
+                          child: Text('Contactos'),
+                        ),
                         const PopupMenuItem<String>(
                           value: 'archived',
                           child: Text('Chats archivados'),
@@ -263,19 +281,6 @@ class _HomeChatsTabState extends ConsumerState<HomeChatsTab> {
           ),
         ),
       ),
-      floatingActionButton: Padding(
-        padding: const EdgeInsets.only(bottom: 20, right: 10),
-        child: SizedBox(
-          height: 54,
-          child: MesseyaPillButton(
-            onTap: isDesktopLinked ? null : () => context.push('/compose'),
-            filled: true,
-            icon: Icons.edit_note_rounded,
-            label: 'Redactar',
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

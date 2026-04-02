@@ -46,7 +46,13 @@ class _LinkDesktopScanPageState extends ConsumerState<LinkDesktopScanPage> {
           .approvePairingSession(sessionId);
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Windows vinculado correctamente.')),
+        SnackBar(
+          content: Text(
+            session.platform == 'web'
+                ? 'Messeya Web vinculado correctamente.'
+                : 'Windows vinculado correctamente.',
+          ),
+        ),
       );
       Navigator.of(context).pop();
     } catch (error) {
@@ -68,9 +74,11 @@ class _LinkDesktopScanPageState extends ConsumerState<LinkDesktopScanPage> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          title: const Text('Vincular Windows'),
+          title: Text(
+            session.platform == 'web' ? 'Vincular Messeya Web' : 'Vincular Windows',
+          ),
           content: Text(
-            'Quieres vincular el equipo "${session.deviceLabel}" a tu cuenta?',
+            'Quieres vincular el dispositivo "${session.deviceLabel}" a tu cuenta?',
           ),
           actions: [
             TextButton(
@@ -98,7 +106,7 @@ class _LinkDesktopScanPageState extends ConsumerState<LinkDesktopScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Escanear QR de Windows')),
+      appBar: AppBar(title: const Text('Escanear QR de dispositivo')),
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(

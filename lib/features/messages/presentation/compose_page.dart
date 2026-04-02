@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -143,42 +144,72 @@ class _ComposePageState extends ConsumerState<ComposePage> {
   }
 
   Future<void> _sendBroadcast() async {
-    if (_selectedUsers.isEmpty || (_messageController.text.isEmpty && _attachedFiles.isEmpty)) return;
-    
-    setState(() => _isSending = true);
-    final repo = ref.read(messagesRepositoryProvider);
-    final chatsRepo = ref.read(chatsRepositoryProvider);
-    final currentUser = await ref.read(profileRepositoryProvider).getCurrentUser();
+    if (_selectedUsers.isEmpty ||
+        (_messageController.text.isEmpty && _attachedFiles.isEmpty)) {
+      return;
+    }
 
-    for (final user in _selectedUsers) {
-      final chatId = await chatsRepo.createOrGetDirectChat(user, currentUser!);
-      
-      if (_attachedFiles.isNotEmpty) {
-        for (int i = 0; i < _attachedFiles.length; i++) {
-          await repo.sendAttachmentMessage(
+    setState(() => _isSending = true);
+    try {
+      final repo = ref.read(messagesRepositoryProvider);
+      final chatsRepo = ref.read(chatsRepositoryProvider);
+      final currentUser = await ref.read(profileRepositoryProvider).getCurrentUser();
+      if (currentUser == null) {
+        throw StateError('No se encontro el usuario actual para enviar el mensaje.');
+      }
+
+      for (final user in _selectedUsers) {
+        final chatId = await chatsRepo
+            .createOrGetDirectChat(user, currentUser)
+            .timeout(
+              const Duration(seconds: 35),
+              onTimeout: () => throw TimeoutException(
+                'No se pudo abrir el chat con ${user.name} a tiempo.',
+              ),
+            );
+
+        if (_attachedFiles.isNotEmpty) {
+          for (int i = 0; i < _attachedFiles.length; i++) {
+            await repo.sendAttachmentMessage(
+              chatId: chatId,
+              type: _isImage(_attachedFiles[i].path) ? 'image' : 'file',
+              file: _attachedFiles[i],
+              text: i == 0 ? _messageController.text : '',
+              subject: i == 0 ? _subjectController.text : '',
+            );
+          }
+        } else {
+          await repo.sendTextMessage(
             chatId: chatId,
-            type: _isImage(_attachedFiles[i].path) ? 'image' : 'file',
-            file: _attachedFiles[i],
-            text: i == 0 ? _messageController.text : '',
-            subject: i == 0 ? _subjectController.text : '',
+            text: _messageController.text,
+            subject: _subjectController.text,
           );
         }
-      } else {
-        await repo.sendTextMessage(
-          chatId: chatId,
-          text: _messageController.text,
-          subject: _subjectController.text,
-        );
       }
-    }
 
-    if (_currentDraftId != null) {
-      await ref.read(draftsRepositoryProvider).deleteDraft(_currentDraftId!);
-    }
+      if (_currentDraftId != null) {
+        await ref.read(draftsRepositoryProvider).deleteDraft(_currentDraftId!);
+      }
 
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Mensajes enviados correctamente')));
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Mensajes enviados correctamente')),
+      );
       context.pop();
+    } on TimeoutException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message ?? 'La operacion excedio el tiempo de espera.')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('No se pudo enviar el mensaje: $error')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isSending = false);
+      }
     }
   }
 

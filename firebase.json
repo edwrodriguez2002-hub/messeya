@@ -3,7 +3,7 @@
     "source": "functions"
   },
   "hosting": {
-    "public": "public",
+    "public": "build/web",
     "ignore": [
       "firebase.json",
       "**/.*",
@@ -17,6 +17,10 @@
       {
         "source": "/privacy",
         "destination": "/privacy.html"
+      },
+      {
+        "source": "**",
+        "destination": "/index.html"
       }
     ]
   }

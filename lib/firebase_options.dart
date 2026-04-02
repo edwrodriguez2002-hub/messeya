@@ -5,9 +5,7 @@ import 'package:flutter/foundation.dart'
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
-      throw UnsupportedError(
-        'Configura Firebase para web o usa flutterfire configure.',
-      );
+      return web;
     }
 
     switch (defaultTargetPlatform) {
@@ -24,5 +22,15 @@ class DefaultFirebaseOptions {
     messagingSenderId: '353282297748',
     projectId: 'messeya-chat-6fec8',
     storageBucket: 'messeya-chat-6fec8.firebasestorage.app',
+  );
+
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyAmCvCBKxWm5WbnkqYXMbTokc_vNmKqp7k',
+    appId: '1:353282297748:web:66fad7e2260142742a8981',
+    messagingSenderId: '353282297748',
+    projectId: 'messeya-chat-6fec8',
+    authDomain: 'messeya-chat-6fec8.firebaseapp.com',
+    storageBucket: 'messeya-chat-6fec8.firebasestorage.app',
+    measurementId: 'G-P6HMESQKVG',
   );
 }

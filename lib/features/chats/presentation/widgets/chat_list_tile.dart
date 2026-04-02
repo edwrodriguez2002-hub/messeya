@@ -5,6 +5,7 @@ import 'package:intl/intl.dart';
 import '../../../../shared/models/chat.dart';
 import '../../../../shared/widgets/messeya_ui.dart';
 import '../../../../shared/widgets/profile_aware_avatar.dart';
+import '../../../profile/data/profile_repository.dart';
 
 class ChatListTile extends ConsumerWidget {
   const ChatListTile({
@@ -24,6 +25,10 @@ class ChatListTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final otherUserId = chat.otherMemberId(currentUserId);
     final isSpace = chat.type != 'direct';
+    
+    final otherUser = isSpace ? null : ref.watch(userProfileProvider(otherUserId)).valueOrNull;
+    final isVerified = otherUser?.isVerified ?? false;
+
     final name = isSpace
         ? (chat.title.isEmpty ? 'Espacio' : chat.title)
         : chat.memberNames[otherUserId] ?? 'Nuevo chat';
@@ -51,20 +56,13 @@ class ChatListTile extends ConsumerWidget {
     return InkWell(
       onTap: onTap,
       onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(32),
+      borderRadius: BorderRadius.circular(28), // REDUCIDO DE 32
       child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14), // REDUCIDO DE 20/20
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(32),
+          borderRadius: BorderRadius.circular(28),
           border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x22000000),
-              blurRadius: 20,
-              offset: Offset(0, 10),
-            ),
-          ],
         ),
         child: Row(
           children: [
@@ -75,15 +73,15 @@ class ChatListTile extends ConsumerWidget {
                   userId: isSpace ? '' : otherUserId,
                   fallbackPhotoUrl: photo,
                   name: name,
-                  radius: 31,
+                  radius: 28, // REDUCIDO DE 31
                 ),
                 if (!isSpace)
                   Positioned(
-                    right: 1,
-                    bottom: 1,
+                    right: 0,
+                    bottom: 0,
                     child: Container(
-                      width: 18,
-                      height: 18,
+                      width: 14, // REDUCIDO DE 18
+                      height: 14,
                       decoration: BoxDecoration(
                         color: unreadCount > 0
                             ? MesseyaUi.success
@@ -91,14 +89,14 @@ class ChatListTile extends ConsumerWidget {
                         shape: BoxShape.circle,
                         border: Border.all(
                           color: const Color(0xFF111A33),
-                          width: 2,
+                          width: 1.5,
                         ),
                       ),
                     ),
                   ),
               ],
             ),
-            const SizedBox(width: 18),
+            const SizedBox(width: 14), // REDUCIDO DE 18
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -106,30 +104,45 @@ class ChatListTile extends ConsumerWidget {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
-                          name,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w800,
-                            fontSize: 20,
-                          ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 17, // REDUCIDO DE 20
+                                ),
+                              ),
+                            ),
+                            if (isVerified) ...[
+                              const SizedBox(width: 4),
+                              const Icon(
+                                Icons.verified_rounded,
+                                color: Colors.blueAccent,
+                                size: 15, // REDUCIDO DE 18
+                              ),
+                            ],
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       if (time.isNotEmpty)
                         Text(
                           time,
                           style: const TextStyle(
                             color: MesseyaUi.textMuted,
-                            fontSize: 16,
+                            fontSize: 13, // REDUCIDO DE 16
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 4), // REDUCIDO DE 6
                   Row(
                     children: [
                       Expanded(
@@ -141,16 +154,16 @@ class ChatListTile extends ConsumerWidget {
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
                             color: MesseyaUi.textMuted,
-                            fontSize: 16,
+                            fontSize: 14, // REDUCIDO DE 16
                             fontWeight: FontWeight.w500,
                           ),
                         ),
                       ),
                       if (unreadCount > 0) ...[
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 10),
                         Container(
-                          width: unreadCount > 9 ? 30 : 26,
-                          height: 26,
+                          width: unreadCount > 9 ? 24 : 20, // REDUCIDO
+                          height: 20,
                           decoration: const BoxDecoration(
                             color: MesseyaUi.accent,
                             shape: BoxShape.circle,
@@ -161,21 +174,13 @@ class ChatListTile extends ConsumerWidget {
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w800,
-                              fontSize: 13,
+                              fontSize: 11, // REDUCIDO
                             ),
                           ),
                         ),
                       ],
                     ],
                   ),
-                  if (chat.pinnedBy.contains(currentUserId)) ...[
-                    const SizedBox(height: 6),
-                    const Icon(
-                      Icons.push_pin_rounded,
-                      size: 15,
-                      color: MesseyaUi.textMuted,
-                    ),
-                  ],
                 ],
               ),
             ),

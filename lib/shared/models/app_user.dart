@@ -12,6 +12,8 @@ class AppUser {
     required this.createdAt,
     required this.isOnline,
     required this.lastSeen,
+    this.publicKey = '',
+    this.isVerified = false,
   });
 
   final String uid;
@@ -24,10 +26,20 @@ class AppUser {
   final DateTime? createdAt;
   final bool isOnline;
   final DateTime? lastSeen;
+  final String publicKey;
+  final bool isVerified;
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String? id}) {
+    // Manejo robusto para isVerified (acepta boolean o string)
+    final verifiedRaw = map['isVerified'];
+    bool verified = false;
+    if (verifiedRaw is bool) {
+      verified = verifiedRaw;
+    } else if (verifiedRaw is String) {
+      verified = verifiedRaw.toLowerCase() == 'true';
+    }
+
     return AppUser(
-      // CORRECCIÓN: Priorizamos el ID pasado (el del documento) sobre el campo interno
       uid: id ?? map['uid'] as String? ?? '',
       username: map['username'] as String? ?? '',
       usernameLower: map['usernameLower'] as String? ?? '',
@@ -38,11 +50,12 @@ class AppUser {
       createdAt: _fromTimestamp(map['createdAt']),
       isOnline: map['isOnline'] as bool? ?? false,
       lastSeen: _fromTimestamp(map['lastSeen']),
+      publicKey: map['publicKey'] as String? ?? '',
+      isVerified: verified,
     );
   }
 
   factory AppUser.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    // CORRECCIÓN: Pasamos doc.id para asegurar que el UID nunca sea una cadena vacía
     return AppUser.fromMap(doc.data() ?? <String, dynamic>{}, id: doc.id);
   }
 
@@ -58,6 +71,8 @@ class AppUser {
       'createdAt': createdAt == null ? null : Timestamp.fromDate(createdAt!),
       'isOnline': isOnline,
       'lastSeen': lastSeen == null ? null : Timestamp.fromDate(lastSeen!),
+      'publicKey': publicKey,
+      'isVerified': isVerified,
     };
   }
 
@@ -72,6 +87,8 @@ class AppUser {
     DateTime? createdAt,
     bool? isOnline,
     DateTime? lastSeen,
+    String? publicKey,
+    bool? isVerified,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -84,6 +101,8 @@ class AppUser {
       createdAt: createdAt ?? this.createdAt,
       isOnline: isOnline ?? this.isOnline,
       lastSeen: lastSeen ?? this.lastSeen,
+      publicKey: publicKey ?? this.publicKey,
+      isVerified: isVerified ?? this.isVerified,
     );
   }
 

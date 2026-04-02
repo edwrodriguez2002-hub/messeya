@@ -6,6 +6,8 @@
   },
   "main": "index.js",
   "scripts": {
+    "start": "node scripts/onesignal-push-dev-server.js",
+    "start:onesignal-push": "node scripts/onesignal-push-dev-server.js",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"

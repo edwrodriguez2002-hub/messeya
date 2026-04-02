@@ -191,6 +191,7 @@ class CallsRepository {
       'screenSharing': false,
       'startedAt': now,
     });
+
     await batch.commit();
   }
 

@@ -1,12 +1,12 @@
 const admin = require("firebase-admin");
 const {onDocumentCreated, onDocumentWritten} = require("firebase-functions/v2/firestore");
+const {onRequest} = require("firebase-functions/v2/https");
 const {logger} = require("firebase-functions");
 const {Resend} = require("resend");
 
 admin.initializeApp();
 
 const db = admin.firestore();
-const messaging = admin.messaging();
 const resendApiKey = process.env.RESEND_API_KEY || "";
 const resendFromEmail = process.env.RESEND_FROM_EMAIL || "";
 const resend = resendApiKey ? new Resend(resendApiKey) : null;
@@ -106,31 +106,31 @@ exports.sendMessagePush = onDocumentCreated(
     const title = chat.type === "direct" ?
       senderName :
       (chat.title || "Nuevo mensaje");
-    const body = buildMessageBody(message, senderName);
+
+    // DETECCIÓN DE MENSAJE CIFRADO
+    let body = buildMessageBody(message, senderName);
+    if (body.startsWith("{") && body.includes("cipherText")) {
+      body = "🔒 Mensaje cifrado";
+    }
 
     await Promise.all(
       recipientIds.map(async (recipientId) => {
         const recipientSnap = await db.collection("users").doc(recipientId).get();
-        const recipient = recipientSnap.data() || {};
-        const tokens = sanitizeTokens(recipient.notificationTokens);
-        if (!tokens.length) return;
+        if (!recipientSnap.exists) return;
 
         const route = buildChatRoute({
           chatId,
           chat,
-          recipientId,
           senderId,
           senderName,
           senderUsername,
           senderPhoto,
         });
 
-        const payload = {
-          tokens,
-          notification: {
-            title,
-            body,
-          },
+        await sendFcmPushToUser({
+          userId: recipientId,
+          title,
+          body,
           data: {
             type: "message",
             route,
@@ -141,18 +141,7 @@ exports.sendMessagePush = onDocumentCreated(
             body,
             notificationId: stableNotificationId(`message:${messageId}`),
           },
-          android: {
-            priority: "high",
-            notification: {
-              channelId: "messeya_messages",
-              priority: "high",
-              defaultSound: true,
-            },
-          },
-        };
-
-        const response = await messaging.sendEachForMulticast(payload);
-        await cleanupInvalidTokens(recipientId, tokens, response);
+        });
       }),
     );
   },
@@ -174,19 +163,15 @@ exports.sendIncomingCallPush = onDocumentCreated(
     if (!userId) return;
 
     const userSnap = await db.collection("users").doc(userId).get();
-    const user = userSnap.data() || {};
-    const tokens = sanitizeTokens(user.notificationTokens);
-    if (!tokens.length) return;
+    if (!userSnap.exists) return;
 
     const callerName = invite.callerName || "Messeya";
     const isVideo = (invite.type || "audio") === "video";
 
-    const payload = {
-      tokens,
-      notification: {
-        title: isVideo ? "Videollamada entrante" : "Llamada entrante",
-        body: `${callerName} te está llamando`,
-      },
+    await sendFcmPushToUser({
+      userId,
+      title: isVideo ? "Videollamada entrante" : "Llamada entrante",
+      body: `${callerName} te está llamando`,
       data: {
         type: "call",
         route: "/calls",
@@ -196,20 +181,7 @@ exports.sendIncomingCallPush = onDocumentCreated(
         body: `${callerName} te está llamando`,
         notificationId: stableNotificationId(`call:${event.params.callId}`),
       },
-      android: {
-        priority: "high",
-        ttl: 30000,
-        notification: {
-          channelId: "messeya_calls",
-          priority: "max",
-          defaultSound: true,
-          visibility: "public",
-        },
-      },
-    };
-
-    const response = await messaging.sendEachForMulticast(payload);
-    await cleanupInvalidTokens(userId, tokens, response);
+    });
   },
 );
 
@@ -236,7 +208,6 @@ function buildMessageBody(message, senderName) {
 function buildChatRoute({
   chatId,
   chat,
-  recipientId,
   senderId,
   senderName,
   senderUsername,
@@ -251,37 +222,72 @@ function buildChatRoute({
   return `/chat/${chatId}?uid=&name=${encodeURIComponent(title)}&username=&photo=${encodeURIComponent(photo)}`;
 }
 
-function sanitizeTokens(value) {
-  if (!Array.isArray(value)) return [];
-  return [...new Set(value.filter((token) => typeof token === "string" && token))];
-}
+async function sendFcmPushToUser({userId, title, body, data}) {
+  const tokenDocs = await db
+    .collection("users")
+    .doc(userId)
+    .collection("linked_devices")
+    .get();
 
-async function cleanupInvalidTokens(userId, tokens, response) {
-  const invalidTokens = [];
+  const tokens = tokenDocs.docs
+    .map((doc) => String(doc.data()?.token || "").trim())
+    .filter(Boolean);
 
-  response.responses.forEach((item, index) => {
-    if (!item.error) return;
-    const code = item.error.code || "";
-    if (
-      code === "messaging/registration-token-not-registered" ||
-      code === "messaging/invalid-registration-token"
-    ) {
-      invalidTokens.push(tokens[index]);
-    } else {
-      logger.warn("FCM send error", {
-        userId,
-        code,
-        message: item.error.message,
-      });
+  const uniqueTokens = [...new Set(tokens)];
+  if (!uniqueTokens.length) {
+    logger.info("FCM push skipped: user has no registered devices", {userId});
+    return;
+  }
+
+  const response = await admin.messaging().sendEachForMulticast({
+    tokens: uniqueTokens,
+    notification: {
+      title,
+      body,
+    },
+    data: {
+      ...(data || {}),
+      title: String(title || ""),
+      body: String(body || ""),
+    },
+    android: {
+      priority: "high",
+      notification: {
+        channelId: data?.type === "call" ? "messeya_calls" : "messeya_messages",
+        sound: "default",
+      },
+    },
+  });
+
+  const invalidErrorCodes = new Set([
+    "messaging/registration-token-not-registered",
+    "messaging/invalid-registration-token",
+  ]);
+
+  const cleanupTasks = [];
+  response.responses.forEach((result, index) => {
+    if (!result.success && invalidErrorCodes.has(result.error?.code)) {
+      cleanupTasks.push(tokenDocs.docs[index]?.ref.delete());
     }
   });
 
-  if (!invalidTokens.length) return;
+  if (cleanupTasks.length) {
+    await Promise.allSettled(cleanupTasks);
+  }
 
-  await db.collection("users").doc(userId).set({
-    notificationTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens),
-    notificationTokenUpdatedAt: admin.firestore.FieldValue.serverTimestamp(),
-  }, {merge: true});
+  if (response.failureCount > 0) {
+    logger.warn("FCM push completed with failures", {
+      userId,
+      successCount: response.successCount,
+      failureCount: response.failureCount,
+    });
+  }
+
+  logger.info("FCM push sent", {
+    userId,
+    successCount: response.successCount,
+    failureCount: response.failureCount,
+  });
 }
 
 function buildOtpEmailTemplate({code, email}) {

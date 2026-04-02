@@ -7,14 +7,13 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../../shared/models/status_item.dart';
 import '../../../shared/widgets/async_value_widget.dart';
-import '../../../shared/widgets/fullscreen_image_page.dart';
 import '../../../shared/widgets/messeya_ui.dart';
 import '../../../shared/widgets/profile_aware_avatar.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../linked_devices/data/linked_devices_repository.dart';
 import '../../profile/data/profile_repository.dart';
 import '../data/statuses_repository.dart';
-import 'status_video_player_page.dart';
+import 'status_view_page.dart';
 
 class StatusesPage extends ConsumerStatefulWidget {
   const StatusesPage({super.key});
@@ -80,6 +79,10 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
+      backgroundColor: const Color(0xFF1E293B),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setModalState) {
@@ -94,26 +97,28 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
+                  const Text(
                     'Nuevo estado',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 20,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
                   const SizedBox(height: 16),
                   TextField(
                     controller: _controller,
                     maxLines: 3,
+                    style: const TextStyle(color: Colors.white),
                     decoration: const InputDecoration(
                       hintText: 'Comparte algo con tus contactos',
+                      hintStyle: TextStyle(color: Colors.white38),
                     ),
                   ),
                   const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
+                  Row(
                     children: [
-                      OutlinedButton.icon(
+                      IconButton(
                         onPressed: () async {
                           final file = await picker.pickImage(
                             source: ImageSource.gallery,
@@ -125,14 +130,12 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
                             videoFile = null;
                           });
                         },
-                        icon: const Icon(Icons.image_outlined),
-                        label: Text(
-                          imageFile == null
-                              ? 'Agregar imagen'
-                              : 'Imagen seleccionada',
+                        icon: Icon(
+                          Icons.image_outlined,
+                          color: imageFile != null ? Colors.blue : Colors.white70,
                         ),
                       ),
-                      OutlinedButton.icon(
+                      IconButton(
                         onPressed: () async {
                           final file = await picker.pickVideo(
                             source: ImageSource.gallery,
@@ -143,19 +146,27 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
                             imageFile = null;
                           });
                         },
-                        icon: const Icon(Icons.videocam_outlined),
-                        label: Text(
-                          videoFile == null
-                              ? 'Agregar video'
-                              : 'Video seleccionado',
+                        icon: Icon(
+                          Icons.videocam_outlined,
+                          color: videoFile != null ? Colors.blue : Colors.white70,
                         ),
                       ),
+                      const Spacer(),
+                      if (imageFile != null || videoFile != null)
+                        const Text(
+                          'Archivo listo',
+                          style: TextStyle(color: Colors.blue, fontSize: 12),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: FilledButton(
+                      style: FilledButton.styleFrom(
+                        backgroundColor: Colors.blue,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
                       onPressed: _publishing
                           ? null
                           : () => _publishStatus(
@@ -166,7 +177,7 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
                           ? const SizedBox(
                               width: 18,
                               height: 18,
-                              child: CircularProgressIndicator(strokeWidth: 2),
+                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
                           : const Text('Publicar estado'),
                     ),
@@ -180,375 +191,124 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
     );
   }
 
-  Future<void> _openStatusDetails({
-    required BuildContext context,
-    required String currentUserId,
-    required StatusItem status,
-  }) async {
-    await ref.read(statusesRepositoryProvider).markViewed(
-          status.id,
-          viewerUserId: currentUserId,
-        );
-
-    if (!context.mounted) return;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        final isMine = status.userId == currentUserId;
-        final viewerNames = ref.watch(statusViewersProvider(status.viewedBy));
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: SingleChildScrollView(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    status.userName,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w700,
-                        ),
-                  ),
-                  const SizedBox(height: 6),
-                  Text('@${status.username}'),
-                  if (status.text.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Text(status.text),
-                  ],
-                  if (status.mediaType == 'image' &&
-                      status.mediaUrl.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(18),
-                      child: InkWell(
-                        onTap: () async {
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => FullscreenImagePage(
-                                imageUrl: status.mediaUrl,
-                                heroTag: 'status-image-${status.id}',
-                                caption: status.text,
-                              ),
-                            ),
-                          );
-                        },
-                        child: Hero(
-                          tag: 'status-image-${status.id}',
-                          child: Image.network(
-                            status.mediaUrl,
-                            width: double.infinity,
-                            height: 260,
-                            fit: BoxFit.cover,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                  if (status.mediaType == 'video' &&
-                      status.mediaUrl.isNotEmpty) ...[
-                    const SizedBox(height: 16),
-                    Card(
-                      child: ListTile(
-                        leading: const Icon(Icons.play_circle_outline_rounded),
-                        title: const Text('Video del estado'),
-                        subtitle: const Text('Toca para abrir el reproductor'),
-                        onTap: () async {
-                          if (!context.mounted) return;
-                          await Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => StatusVideoPlayerPage(
-                                videoUrl: status.mediaUrl,
-                                title: status.userName,
-                              ),
-                            ),
-                          );
-                        },
-                      ),
-                    ),
-                  ],
-                  if (isMine) ...[
-                    const SizedBox(height: 18),
-                    Text(
-                      'Vistas',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 8),
-                    viewerNames.when(
-                      data: (names) => Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Total: ${names.length}'),
-                          const SizedBox(height: 8),
-                          for (final name in names)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 6),
-                              child: Text('- $name'),
-                            ),
-                        ],
-                      ),
-                      loading: () => const CircularProgressIndicator(),
-                      error: (_, __) =>
-                          const Text('No se pudieron cargar las vistas.'),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 18),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: () async {
-                          Navigator.of(context).pop();
-                          await _showReplyComposer(status);
-                        },
-                        icon: const Icon(Icons.reply_rounded),
-                        label: const Text('Responder estado'),
-                      ),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _showReplyComposer(StatusItem status) async {
-    final controller = TextEditingController();
-    final submitted = await showModalBottomSheet<bool>(
-      context: context,
-      isScrollControlled: true,
-      builder: (context) {
-        var sending = false;
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return SafeArea(
-              child: Padding(
-                padding: EdgeInsets.only(
-                  left: 20,
-                  right: 20,
-                  top: 20,
-                  bottom: MediaQuery.of(context).viewInsets.bottom + 20,
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Responder a ${status.userName}',
-                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      maxLines: 4,
-                      textCapitalization: TextCapitalization.sentences,
-                      decoration: const InputDecoration(
-                        hintText: 'Escribe una respuesta para este estado',
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: sending
-                            ? null
-                            : () async {
-                                setModalState(() => sending = true);
-                                try {
-                                  await ref
-                                      .read(statusesRepositoryProvider)
-                                      .replyToStatus(
-                                        status: status,
-                                        text: controller.text,
-                                      );
-                                  if (context.mounted) {
-                                    Navigator.of(context).pop(true);
-                                  }
-                                } catch (error) {
-                                  if (context.mounted) {
-                                    ScaffoldMessenger.of(context).showSnackBar(
-                                      SnackBar(
-                                        content: Text(
-                                          error.toString().replaceFirst(
-                                                'Exception: ',
-                                                '',
-                                              ),
-                                        ),
-                                      ),
-                                    );
-                                  }
-                                  setModalState(() => sending = false);
-                                }
-                              },
-                        child: sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Enviar respuesta'),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-    controller.dispose();
-    if (submitted == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Respuesta enviada al chat.')),
-      );
-    }
-  }
-
-  Future<void> _deleteStatus(StatusItem status) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          title: const Text('Borrar estado'),
-          content: const Text(
-            'Este estado dejara de estar visible para tus contactos. ¿Quieres borrarlo?',
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: const Text('Cancelar'),
-            ),
-            FilledButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: const Text('Borrar'),
-            ),
-          ],
-        );
-      },
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      await ref.read(statusesRepositoryProvider).deleteStatus(status.id);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Estado borrado.')),
-      );
-    } catch (error) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(error.toString().replaceFirst('Exception: ', '')),
-        ),
-      );
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
-    final statuses = ref.watch(statusesProvider);
+    final statusesAsync = ref.watch(statusesProvider);
     final currentUserId = ref.watch(effectiveMessagingUserIdProvider);
-    final desktopSession = ref.watch(desktopClientSessionProvider);
     final isDesktopLinked = ref.watch(currentUserProvider)?.isAnonymous == true;
 
     return Scaffold(
       body: MesseyaBackground(
         child: SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.only(top: 18, bottom: 16),
-                  child: MesseyaTopBar(
-                    title: 'Estados',
-                    actions: [
-                      const MesseyaRoundIconButton(icon: Icons.search_rounded),
-                      MesseyaRoundIconButton(
-                        icon: Icons.more_vert_rounded,
-                        onTap: () => context.push('/statuses/hidden'),
+          child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
+                child: MesseyaTopBar(
+                  title: 'Estados',
+                  actions: [
+                    MesseyaRoundIconButton(
+                      icon: Icons.more_vert_rounded,
+                      onTap: () => context.push('/statuses/hidden'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: ListView(
+                    children: [
+                      if (!isDesktopLinked) _OwnStatusCard(onTap: _openComposer),
+                      const SizedBox(height: 24),
+                      const MesseyaSectionLabel('Estados recientes'),
+                      const SizedBox(height: 14),
+                      AsyncValueWidget(
+                        value: statusesAsync,
+                        data: (items) {
+                          if (items.isEmpty) {
+                            return const Center(
+                              child: Padding(
+                                padding: EdgeInsets.all(40),
+                                child: Text(
+                                  'Todavía no hay estados nuevos.',
+                                  style: TextStyle(color: Colors.white38),
+                                ),
+                              ),
+                            );
+                          }
+
+                          // AGRUPAR POR USUARIO
+                          final Map<String, List<StatusItem>> grouped = {};
+                          for (var item in items) {
+                            grouped.putIfAbsent(item.userId, () => []).add(item);
+                          }
+
+                          // Separar vistos de no vistos
+                          final List<String> recentUserIds = [];
+                          final List<String> viewedUserIds = [];
+
+                          for (var userId in grouped.keys) {
+                            final userStatuses = grouped[userId]!;
+                            final hasUnviewed = userStatuses.any((s) => !s.viewedBy.contains(currentUserId));
+                            if (hasUnviewed) {
+                              recentUserIds.add(userId);
+                            } else {
+                              viewedUserIds.add(userId);
+                            }
+                          }
+
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              // RECIENTES
+                              ...recentUserIds.map((uid) => _buildUserStatusTile(
+                                context, uid, grouped[uid]!, false
+                              )),
+                              
+                              if (viewedUserIds.isNotEmpty) ...[
+                                const SizedBox(height: 24),
+                                const MesseyaSectionLabel('Vistos'),
+                                const SizedBox(height: 14),
+                                ...viewedUserIds.map((uid) => _buildUserStatusTile(
+                                  context, uid, grouped[uid]!, true
+                                )),
+                              ],
+                              const SizedBox(height: 100),
+                            ],
+                          );
+                        },
                       ),
                     ],
                   ),
                 ),
-                if (isDesktopLinked)
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 14),
-                    child: MesseyaPanel(
-                      padding: const EdgeInsets.all(14),
-                      borderRadius: 22,
-                      child: Text(
-                        desktopSession.valueOrNull?.ownerName.isNotEmpty == true
-                            ? 'Estas viendo estados desde Windows vinculado a ${desktopSession.valueOrNull!.ownerName}. La publicacion sigue disponible solo en Android.'
-                            : 'Estas viendo estados desde Windows. La publicacion sigue disponible solo en Android.',
-                      ),
-                    ),
-                  ),
-                if (!isDesktopLinked) _OwnStatusCard(onTap: _openComposer),
-                const SizedBox(height: 18),
-                MesseyaSectionLabel(
-                  'Estados recientes',
-                  trailing: MesseyaPillButton(
-                    label: 'Privacidad',
-                    icon: Icons.lock_outline_rounded,
-                    onTap: () => context.push('/statuses/hidden'),
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Expanded(
-                  child: AsyncValueWidget(
-                    value: statuses,
-                    data: (items) {
-                      if (items.isEmpty) {
-                        return const Center(
-                          child: Text(
-                              'Todavia no hay estados. Publica el primero.'),
-                        );
-                      }
-
-                      return ListView.separated(
-                        padding: const EdgeInsets.only(top: 2, bottom: 140),
-                        itemCount: items.length,
-                        separatorBuilder: (_, __) => const SizedBox(height: 14),
-                        itemBuilder: (context, index) {
-                          final status = items[index];
-                          final isMine = status.userId == currentUserId;
-                          return _StatusTile(
-                            status: status,
-                            isMine: isMine,
-                            currentUserId: currentUserId,
-                            onTap: () => _openStatusDetails(
-                              context: context,
-                              currentUserId: currentUserId,
-                              status: status,
-                            ),
-                            onDelete:
-                                isMine ? () => _deleteStatus(status) : null,
-                            trailingText: isMine
-                                ? '${status.viewedBy.length} vistas'
-                                : _relativeStatusTime(status.createdAt),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildUserStatusTile(BuildContext context, String userId, List<StatusItem> userStatuses, bool isViewed) {
+    final lastStatus = userStatuses.first;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: _StatusTile(
+        status: lastStatus,
+        count: userStatuses.length,
+        isViewed: isViewed,
+        onTap: () {
+          Navigator.of(context).push(
+            MaterialPageRoute(
+              builder: (_) => StatusViewPage(
+                statuses: userStatuses.reversed.toList(),
+                userName: lastStatus.userName,
+              ),
+            ),
+          );
+        },
+        trailingText: _relativeStatusTime(lastStatus.createdAt),
       ),
     );
   }
@@ -564,10 +324,7 @@ class _StatusesPageState extends ConsumerState<StatusesPage> {
 }
 
 class _OwnStatusCard extends ConsumerWidget {
-  const _OwnStatusCard({
-    required this.onTap,
-  });
-
+  const _OwnStatusCard({required this.onTap});
   final VoidCallback onTap;
 
   @override
@@ -577,79 +334,51 @@ class _OwnStatusCard extends ConsumerWidget {
       data: (user) {
         if (user == null) return const SizedBox.shrink();
         return MesseyaPanel(
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  ProfileAwareAvatar(
-                    userId: user.uid,
-                    fallbackPhotoUrl: user.photoUrl,
-                    name: user.name,
-                    radius: 34,
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          user.name,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 20,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          '@${user.username}',
-                          style: const TextStyle(
-                            color: MesseyaUi.textMuted,
-                            fontSize: 18,
-                          ),
-                        ),
-                      ],
+          padding: const EdgeInsets.all(16),
+          child: InkWell(
+            onTap: onTap,
+            child: Row(
+              children: [
+                Stack(
+                  children: [
+                    ProfileAwareAvatar(
+                      userId: user.uid,
+                      fallbackPhotoUrl: user.photoUrl,
+                      name: user.name,
+                      radius: 28,
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 18),
-              InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(22),
-                child: Ink(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.04),
-                    borderRadius: BorderRadius.circular(22),
-                  ),
-                  child: const Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 22,
-                        backgroundColor: MesseyaUi.accent,
-                        child: Icon(
-                          Icons.add_rounded,
-                          color: Colors.white,
-                          size: 28,
+                    Positioned(
+                      right: 0,
+                      bottom: 0,
+                      child: Container(
+                        decoration: const BoxDecoration(
+                          color: Colors.blue,
+                          shape: BoxShape.circle,
                         ),
+                        child: const Icon(Icons.add, color: Colors.white, size: 18),
                       ),
-                      SizedBox(width: 14),
+                    ),
+                  ],
+                ),
+                const SizedBox(width: 14),
+                const Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Text(
-                        'Añade un estado',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 19,
-                          fontWeight: FontWeight.w800,
-                        ),
+                        'Mi estado',
+                        style: TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Toca para añadir una actualización',
+                        style: TextStyle(color: Colors.white38, fontSize: 14),
                       ),
                     ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },
@@ -662,112 +391,46 @@ class _OwnStatusCard extends ConsumerWidget {
 class _StatusTile extends StatelessWidget {
   const _StatusTile({
     required this.status,
-    required this.isMine,
-    required this.currentUserId,
+    required this.count,
+    required this.isViewed,
     required this.onTap,
     required this.trailingText,
-    this.onDelete,
   });
 
   final StatusItem status;
-  final bool isMine;
-  final String currentUserId;
+  final int count;
+  final bool isViewed;
   final VoidCallback onTap;
-  final VoidCallback? onDelete;
   final String trailingText;
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
+    return ListTile(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(30),
-      child: Ink(
-        padding: const EdgeInsets.all(18),
+      contentPadding: EdgeInsets.zero,
+      leading: Container(
+        padding: const EdgeInsets.all(3),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
-          borderRadius: BorderRadius.circular(30),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: isViewed ? Colors.white24 : Colors.blue,
+            width: 2,
+          ),
         ),
-        child: Row(
-          children: [
-            Stack(
-              clipBehavior: Clip.none,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: isMine
-                          ? const [Color(0xFF5BA7FF), Color(0xFF74F0B5)]
-                          : const [Color(0xFFE5F0A2), Color(0xFF74F0B5)],
-                    ),
-                  ),
-                  child: ProfileAwareAvatar(
-                    userId: status.userId,
-                    fallbackPhotoUrl: status.userPhoto,
-                    name: status.userName,
-                    radius: 30,
-                  ),
-                ),
-                Positioned(
-                  right: 2,
-                  bottom: 2,
-                  child: Container(
-                    width: 18,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: isMine ? MesseyaUi.accent : MesseyaUi.success,
-                      shape: BoxShape.circle,
-                      border:
-                          Border.all(color: const Color(0xFF111A33), width: 2),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    status.userName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 20,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    '@${status.username}',
-                    style: const TextStyle(
-                      color: MesseyaUi.textMuted,
-                      fontSize: 17,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            if (isMine)
-              IconButton(
-                onPressed: onDelete,
-                icon: const Icon(
-                  Icons.delete_outline_rounded,
-                  color: Colors.white,
-                ),
-              )
-            else
-              Text(
-                trailingText,
-                style: const TextStyle(
-                  color: MesseyaUi.textMuted,
-                  fontSize: 18,
-                ),
-              ),
-          ],
+        child: ProfileAwareAvatar(
+          userId: status.userId,
+          fallbackPhotoUrl: status.userPhoto,
+          name: status.userName,
+          radius: 26,
         ),
+      ),
+      title: Text(
+        status.userName,
+        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 16),
+      ),
+      subtitle: Text(
+        trailingText,
+        style: const TextStyle(color: Colors.white38, fontSize: 13),
       ),
     );
   }

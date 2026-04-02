@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../features/auth/data/auth_repository.dart';
@@ -26,7 +27,7 @@ class LinkedDesktopOutboxService {
   final CallsRepository _callsRepository;
   final MessagesRepository _messagesRepository;
   StreamSubscription<Object?>? _authSubscription;
-  StreamSubscription<List<dynamic>>? _outboxSubscription;
+  StreamSubscription<List<QueryDocumentSnapshot<Map<String, dynamic>>>>? _outboxSubscription;
 
   Future<void> initialize() async {
     _authSubscription?.cancel();
@@ -39,7 +40,8 @@ class LinkedDesktopOutboxService {
           .watchPendingDesktopOutbox(user.uid)
           .listen((documents) async {
         for (final document in documents) {
-          final type = document.data()['type'] as String? ?? 'text';
+          final data = document.data();
+          final type = data['type'] as String? ?? 'text';
           if (type == 'call_request') {
             await _callsRepository.processDesktopCallRequest(document);
           } else {

@@ -1,14 +1,15 @@
 import 'dart:async';
-
+import 'dart:convert';
+import 'dart:io' show Platform;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-
+import 'package:permission_handler/permission_handler.dart';
 import '../../firebase_options.dart';
 import '../../routing/app_router.dart';
 import '../firebase/firebase_providers.dart';
@@ -36,25 +37,26 @@ final fcmServiceProvider = Provider<FcmService>(
 
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  debugPrint('Mensaje FCM recibido en background: ${message.messageId}');
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
   );
-  if (message.notification != null) {
-    // Android ya muestra las notificaciones remotas con bloque notification
-    // cuando la app esta en segundo plano o terminada.
-    return;
-  }
+  
+  if (message.notification != null) return;
+
   await LocalNotificationsService.initializeBackground();
-  final title = message.notification?.title ??
-      message.data['title']?.toString() ??
-      'Messeya';
-  final body = message.notification?.body ??
-      message.data['body']?.toString() ??
-      'Tienes una nueva notificacion.';
+  
+  final title = message.data['title']?.toString() ?? 'Messeya';
+  String body = message.data['body']?.toString() ?? 'Tienes un nuevo mensaje.';
+  
+  if (body.startsWith('{') && body.contains('cipherText')) {
+    body = '🔒 Mensaje cifrado';
+  }
+
   final payload = message.data['route']?.toString() ?? '/home';
   final type = message.data['type']?.toString() ?? 'message';
-  final notificationId =
-      message.data['notificationId']?.toString() ?? message.messageId;
+  final notificationId = message.data['notificationId']?.toString() ?? message.messageId;
+
   await LocalNotificationsService.showBackgroundRemoteNotification(
     title: title,
     body: body,
@@ -77,154 +79,150 @@ class FcmService {
   final FirebaseFirestore _firestore;
   final LocalNotificationsService _localNotifications;
 
-  StreamSubscription<RemoteMessage>? _foregroundSubscription;
+  bool _initialized = false;
+  String? _registeredToken;
   StreamSubscription<User?>? _authSubscription;
   StreamSubscription<String>? _tokenRefreshSubscription;
-  bool _initialized = false;
 
   Future<void> initialize() async {
     if (_initialized) return;
     try {
-      final launchPayload = await _localNotifications.initialize(
-        onPayloadTap: _handleNotificationPayload,
-      );
-      await _messaging.setAutoInitEnabled(true);
-      final permissionSettings = await _messaging.requestPermission(
+      await _localNotifications.initialize(onPayloadTap: _handleNotificationPayload);
+      
+      await _messaging.requestPermission(
         alert: true,
         badge: true,
         sound: true,
-        provisional: false,
+        criticalAlert: true,
       );
+
+      if (Platform.isAndroid) {
+        await Permission.notification.request();
+      }
 
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
-      _foregroundSubscription ??= FirebaseMessaging.onMessage.listen(
-        (message) async {
-          await _showRemoteMessageLocally(message);
-        },
-      );
+      FirebaseMessaging.onMessage.listen((message) async {
+        await _showRemoteMessageLocally(message);
+      });
 
       FirebaseMessaging.onMessageOpenedApp.listen((message) {
         final payload = message.data['route']?.toString();
-        if (payload != null && payload.isNotEmpty) {
-          _handleNotificationPayload(payload);
-        }
+        if (payload != null) _handleNotificationPayload(payload);
       });
 
-      final initialMessage = await _messaging.getInitialMessage();
-      final initialPayload = initialMessage?.data['route']?.toString();
-      final startupPayload = launchPayload != null && launchPayload.isNotEmpty
-          ? launchPayload
-          : initialPayload;
-      if (startupPayload != null && startupPayload.isNotEmpty) {
-        Future<void>.delayed(
-          const Duration(milliseconds: 600),
-          () => _handleNotificationPayload(startupPayload),
-        );
-      }
-
-      _authSubscription ??= _auth.authStateChanges().listen((user) async {
-        if (user == null || user.isAnonymous) return;
-        await _syncTokenForUser(user.uid);
-      });
-
-      _tokenRefreshSubscription ??= _messaging.onTokenRefresh.listen((token) {
-        final user = _auth.currentUser;
-        if (user == null || user.isAnonymous) return;
-        _persistToken(user.uid, token);
-      });
-
-      final user = _auth.currentUser;
-      if (user != null && !user.isAnonymous) {
-        await _syncTokenForUser(user.uid);
-      }
-
-      if (permissionSettings.authorizationStatus ==
-          AuthorizationStatus.denied) {
-        debugPrint('FCM notifications permission denied by user.');
-      }
-
+      _setupTokenSync();
       _initialized = true;
-    } catch (error, stackTrace) {
-      debugPrint('FCM init skipped: $error');
-      debugPrintStack(stackTrace: stackTrace);
+    } catch (e) {
+      debugPrint('FCM Init Error: $e');
     }
   }
 
-  Future<void> showChatPreviewNotification({
-    required String title,
-    required String body,
-    required String route,
-    String? notificationId,
-  }) async {
-    await _localNotifications.showChatNotification(
-      title: title,
-      body: body,
-      payload: route,
-      notificationId: notificationId,
-    );
+  void _setupTokenSync() {
+    _authSubscription?.cancel();
+    _authSubscription = _auth.authStateChanges().listen((user) async {
+      if (user == null || user.isAnonymous) {
+        await _unregisterCurrentDeviceFromFirestore();
+        return;
+      }
+
+      final token = await _messaging.getToken();
+      if (token != null) {
+        await _registerDeviceInFirestore(token);
+      }
+    });
+
+    _tokenRefreshSubscription?.cancel();
+    _tokenRefreshSubscription = _messaging.onTokenRefresh.listen((token) async {
+      await _replaceRegisteredDevice(token);
+    });
   }
 
-  Future<void> showIncomingCallSystemNotification({
-    required String callerName,
-    required bool isVideo,
-    String route = '/calls',
-    String? notificationId,
-  }) async {
-    await _localNotifications.showIncomingCallNotification(
-      callerName: callerName,
-      isVideo: isVideo,
-      payload: route,
-      notificationId: notificationId,
-    );
+  Future<void> deleteTokenOnLogout() async {
+    await _unregisterCurrentDeviceFromFirestore();
+    await _messaging.deleteToken();
+    _registeredToken = null;
   }
 
   Future<void> _showRemoteMessageLocally(RemoteMessage message) async {
-    final title = message.notification?.title ??
-        message.data['title']?.toString() ??
-        'Messeya';
-    final body = message.notification?.body ??
-        message.data['body']?.toString() ??
-        'Tienes una nueva notificacion.';
+    final title = message.data['title']?.toString() ?? message.notification?.title ?? 'Messeya';
+    String body = message.data['body']?.toString() ?? message.notification?.body ?? 'Nuevo mensaje';
+    
+    if (body.startsWith('{') && body.contains('cipherText')) {
+      body = '🔒 Mensaje cifrado';
+    }
+
     final payload = message.data['route']?.toString() ?? '/home';
     final type = message.data['type']?.toString() ?? 'message';
-    final notificationId =
-        message.data['notificationId']?.toString() ?? message.messageId;
 
     if (type == 'call') {
       await _localNotifications.showIncomingCallNotification(
         callerName: title,
         isVideo: (message.data['callType']?.toString() ?? 'audio') == 'video',
         payload: payload,
-        notificationId: notificationId,
       );
-      return;
+    } else {
+      await _localNotifications.showChatNotification(
+        title: title,
+        body: body,
+        payload: payload,
+      );
     }
-
-    await _localNotifications.showChatNotification(
-      title: title,
-      body: body,
-      payload: payload,
-      notificationId: notificationId,
-    );
   }
 
   void _handleNotificationPayload(String payload) {
-    final context = rootNavigatorKey.currentContext;
-    if (context == null || !context.mounted) return;
-    context.go(payload);
+    rootNavigatorKey.currentContext?.go(payload);
   }
 
-  Future<void> _syncTokenForUser(String uid) async {
-    final token = await _messaging.getToken();
-    if (token == null || token.isEmpty) return;
-    await _persistToken(uid, token);
+  Future<void> _replaceRegisteredDevice(String nextToken) async {
+    if (_registeredToken == nextToken) return;
+
+    await _unregisterCurrentDeviceFromFirestore();
+    await _registerDeviceInFirestore(nextToken);
   }
 
-  Future<void> _persistToken(String uid, String token) async {
-    await _firestore.collection('users').doc(uid).set({
-      'notificationTokens': FieldValue.arrayUnion([token]),
-      'notificationTokenUpdatedAt': FieldValue.serverTimestamp(),
-    }, SetOptions(merge: true));
+  Future<void> _registerDeviceInFirestore(String token) async {
+    final user = _auth.currentUser;
+    if (user == null || user.isAnonymous) return;
+
+    try {
+      if (_registeredToken != null && _registeredToken != token) {
+        await _usersLinkedDevices(user.uid).doc(_deviceDocId(_registeredToken!)).delete();
+      }
+
+      await _usersLinkedDevices(user.uid).doc(_deviceDocId(token)).set({
+        'token': token,
+        'platform': Platform.isAndroid ? 'android' : 'unknown',
+        'updatedAt': FieldValue.serverTimestamp(),
+        'createdAt': FieldValue.serverTimestamp(),
+      }, SetOptions(merge: true));
+      _registeredToken = token;
+      debugPrint('FCM Push: dispositivo registrado en Firestore.');
+    } catch (error) {
+      debugPrint('FCM Push: error registrando dispositivo: $error');
+    }
+  }
+
+  Future<void> _unregisterCurrentDeviceFromFirestore() async {
+    final token = _registeredToken;
+    final user = _auth.currentUser;
+    if (token == null || user == null) return;
+
+    try {
+      await _usersLinkedDevices(user.uid).doc(_deviceDocId(token)).delete();
+      debugPrint('FCM Push: dispositivo removido de Firestore.');
+    } catch (error) {
+      debugPrint('FCM Push: error removiendo dispositivo: $error');
+    } finally {
+      _registeredToken = null;
+    }
+  }
+
+  CollectionReference<Map<String, dynamic>> _usersLinkedDevices(String userId) {
+    return _firestore.collection('users').doc(userId).collection('linked_devices');
+  }
+
+  String _deviceDocId(String token) {
+    return base64Url.encode(utf8.encode(token)).replaceAll('=', '');
   }
 }

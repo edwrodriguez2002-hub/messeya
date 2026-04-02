@@ -17,7 +17,7 @@ class LinkedDevicesPage extends ConsumerWidget {
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push('/settings/linked-devices/scan'),
         icon: const Icon(Icons.qr_code_scanner_rounded),
-        label: const Text('Vincular Windows'),
+        label: const Text('Vincular web o Windows'),
       ),
       body: AsyncValueWidget(
         value: devices,
@@ -27,7 +27,7 @@ class LinkedDevicesPage extends ConsumerWidget {
               child: Padding(
                 padding: EdgeInsets.all(24),
                 child: Text(
-                  'Aun no tienes equipos vinculados.\nEscanea el QR desde tu Windows para conectarlo con tu Android.',
+                  'Aun no tienes equipos vinculados.\nEscanea el QR desde tu navegador o tu Windows para conectarlo con tu Android.',
                   textAlign: TextAlign.center,
                 ),
               ),
@@ -45,9 +45,11 @@ class LinkedDevicesPage extends ConsumerWidget {
                 child: ListTile(
                   leading: CircleAvatar(
                     child: Icon(
-                      device.platform == 'windows'
-                          ? Icons.desktop_windows_rounded
-                          : Icons.devices_other_rounded,
+                      switch (device.platform) {
+                        'windows' => Icons.desktop_windows_rounded,
+                        'web' => Icons.language_rounded,
+                        _ => Icons.devices_other_rounded,
+                      },
                     ),
                   ),
                   title: Text(

@@ -1,0 +1,9 @@
+services:
+  - type: web
+    name: messeya-onesignal-push
+    env: node
+    rootDir: functions
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start:onesignal-push
+    autoDeploy: true

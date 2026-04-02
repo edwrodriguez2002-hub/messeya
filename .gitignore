@@ -31,9 +31,13 @@ migrate_working_dir/
 .pub-cache/
 .pub/
 /build/
+/android/build/
 /coverage/
 /.vercel/
 /node_modules/
+.firebase/*.cache
+.vscode/
+functions/.env
 
 # Symbolication related
 app.*.symbols
@@ -45,3 +49,5 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+.vercel
+.env*.local

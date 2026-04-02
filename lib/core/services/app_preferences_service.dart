@@ -98,6 +98,34 @@ class AppPreferencesService {
   static const _hybridGatewayEnabledKey = 'hybrid_gateway_enabled';
   static const _hybridRelayTermsAcceptedKey = 'hybrid_relay_terms_accepted';
 
+  // --- NUEVAS CLAVES PARA CORREO MODERNO ---
+  static const _userSignatureKey = 'user_professional_signature';
+  static const _draftSubjectPrefix = 'draft_subject_';
+  static const _draftBodyPrefix = 'draft_body_';
+
+  // --- MÉTODOS DE FIRMA ---
+  String getUserSignature() => _preferences.getString(_userSignatureKey) ?? '';
+  Future<void> setUserSignature(String value) => _preferences.setString(_userSignatureKey, value);
+
+  // --- MÉTODOS DE BORRADORES ---
+  Future<void> saveDraft(String chatId, String subject, String body) async {
+    await _preferences.setString('$_draftSubjectPrefix$chatId', subject);
+    await _preferences.setString('$_draftBodyPrefix$chatId', body);
+  }
+
+  Map<String, String> getDraft(String chatId) {
+    return {
+      'subject': _preferences.getString('$_draftSubjectPrefix$chatId') ?? '',
+      'body': _preferences.getString('$_draftBodyPrefix$chatId') ?? '',
+    };
+  }
+
+  Future<void> clearDraft(String chatId) async {
+    await _preferences.remove('$_draftSubjectPrefix$chatId');
+    await _preferences.remove('$_draftBodyPrefix$chatId');
+  }
+
+  // --- MÉTODOS EXISTENTES ---
   ThemeMode getThemeMode() {
     final value = _preferences.getString(_themeModeKey);
     return switch (value) {
@@ -258,7 +286,7 @@ class AppPreferencesService {
 
   bool getHybridEnabled() =>
       ReleaseFeatures.hybridNetworkPubliclyEnabled &&
-      (_preferences.getBool(_hybridEnabledKey) ?? false);
+      (_preferences.getBool(_hybridEnabledKey) ?? true);
 
   Future<void> setHybridEnabled(bool value) {
     if (!ReleaseFeatures.hybridNetworkPubliclyEnabled) {

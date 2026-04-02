@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
@@ -9,7 +10,12 @@ import '../../profile/data/profile_repository.dart';
 
 final googleSignInProvider = Provider<GoogleSignIn>(
   (ref) => GoogleSignIn(
-    serverClientId: '353282297748-us0kv56cnbu9s4tbgtipk5qsq126br50.apps.googleusercontent.com',
+    clientId: kIsWeb
+        ? '353282297748-us0kv56cnbu9s4tbgtipk5qsq126br50.apps.googleusercontent.com'
+        : null,
+    serverClientId: kIsWeb
+        ? null
+        : '353282297748-us0kv56cnbu9s4tbgtipk5qsq126br50.apps.googleusercontent.com',
   ),
 );
 
@@ -51,12 +57,16 @@ class AuthRepository {
     if (_auth.currentUser != null) {
       return _auth.currentUser!;
     }
-    final credential = await _auth.signInAnonymously();
-    final user = credential.user;
-    if (user == null) {
-      throw Exception('No pudimos crear la sesion temporal del dispositivo.');
+    try {
+      final credential = await _auth.signInAnonymously();
+      final user = credential.user;
+      if (user == null) {
+        throw Exception('No pudimos crear la sesion temporal del dispositivo.');
+      }
+      return user;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapError(e));
     }
-    return user;
   }
 
   Future<void> signIn({
@@ -64,14 +74,12 @@ class AuthRepository {
     required String password,
   }) async {
     try {
-      final credential = await _auth.signInWithEmailAndPassword(
+      await _auth.signInWithEmailAndPassword(
         email: email.trim(),
         password: password.trim(),
       );
-      await _ensureSignedInProfile(
-        credential.user,
-        fallbackName: _emailLocalPart(email) ?? 'Usuario',
-      );
+      // OPTIMIZACIÓN: En inicio de sesión tradicional (email/pass), el perfil DEBE existir.
+      // No llamamos a ensureUserProfile para evitar escrituras innecesarias en Firestore.
       await _emailOtpSessionController.clear();
       await _profileRepository.setOnlineStatus(isOnline: true);
     } on FirebaseAuthException catch (e) {
@@ -92,9 +100,9 @@ class AuthRepository {
         password: password.trim(),
       );
 
+      // SOLO al registrarse por primera vez aseguramos la creación del perfil y username.
       await _profileRepository.ensureUserProfile(
         uid: credential.user!.uid,
-        // Al registrarse manualmente, si no hay username usamos el email local
         desiredUsername: _preferredUsername(
           email: normalizedEmail,
           displayName: name,
@@ -128,10 +136,11 @@ class AuthRepository {
         throw Exception('No se pudo autenticar con Google.');
       }
 
+      // Para Google, sí usamos ensureUserProfile por si es la primera vez que entra con este método.
+      // La lógica interna de ensureUserProfile evitará recrear el username si ya existe.
       await _profileRepository.ensureUserProfile(
         uid: user.uid,
         email: user.email ?? '',
-        // CORRECCIÓN: Ahora priorizamos la parte local del correo para el username
         desiredUsername: _preferredUsername(
           email: user.email,
           displayName: user.displayName,
@@ -222,27 +231,6 @@ class AuthRepository {
     await _profileRepository.setOnlineStatus(isOnline: true);
   }
 
-  Future<void> _ensureSignedInProfile(
-    User? user, {
-    required String fallbackName,
-  }) async {
-    if (user == null) return;
-
-    final displayName = user.displayName?.trim();
-    final email = user.email ?? '';
-    await _profileRepository.ensureUserProfile(
-      uid: user.uid,
-      email: email,
-      desiredUsername: _preferredUsername(
-        email: email,
-        displayName: displayName,
-        fallback: fallbackName,
-      ),
-      name: displayName?.isNotEmpty == true ? displayName! : fallbackName,
-      photoUrl: user.photoURL ?? '',
-    );
-  }
-
   Future<void> signOut() async {
     try {
       await _profileRepository.setOnlineStatus(isOnline: false);
@@ -287,6 +275,8 @@ class AuthRepository {
         return 'Ese correo ya existe con otro metodo de acceso.';
       case 'operation-not-allowed':
         return 'Ese metodo de acceso no esta habilitado en Firebase.';
+      case 'admin-restricted-operation':
+        return 'Activa el acceso anonimo en Firebase Authentication para usar la vinculacion por QR en la web.';
       case 'invalid-verification-code':
         return 'El codigo ingresado no es valido.';
       case 'invalid-verification-id':

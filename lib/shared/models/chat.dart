@@ -32,6 +32,9 @@ class Chat {
     required this.directMessageRequestLimit,
     required this.directMessageRequestSentCount,
     required this.unreadCounts,
+    this.scope = 'personal',
+    this.companyId = '',
+    this.companyName = '',
   });
 
   final String id;
@@ -64,6 +67,9 @@ class Chat {
   final int directMessageRequestLimit;
   final int directMessageRequestSentCount;
   final Map<String, int> unreadCounts;
+  final String scope;
+  final String companyId;
+  final String companyName;
 
   factory Chat.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final map = doc.data() ?? <String, dynamic>{};
@@ -116,6 +122,9 @@ class Chat {
               MapEntry(key.toString(), (value as num?)?.toInt() ?? 0),
         ),
       ),
+      scope: map['scope'] as String? ?? 'personal',
+      companyId: map['companyId'] as String? ?? '',
+      companyName: map['companyName'] as String? ?? '',
     );
   }
 
@@ -151,6 +160,9 @@ class Chat {
       'directMessageRequestLimit': directMessageRequestLimit,
       'directMessageRequestSentCount': directMessageRequestSentCount,
       'unreadCounts': unreadCounts,
+      'scope': scope,
+      'companyId': companyId,
+      'companyName': companyName,
     };
   }
 

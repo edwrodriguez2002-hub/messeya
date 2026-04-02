@@ -229,25 +229,7 @@ class StatusesRepository {
   }
 
   Future<List<String>> _acceptedStatusAudience(String currentUserId) async {
-    final chats = await _firestore
-        .collection('chats')
-        .where('members', arrayContains: currentUserId)
-        .where('type', isEqualTo: 'direct')
-        .get();
-    final contacts = <String>{currentUserId};
-    for (final doc in chats.docs) {
-      final data = doc.data();
-      final status =
-          data['directMessageRequestStatus'] as String? ?? 'accepted';
-      if (status != 'accepted') continue;
-      final members = List<String>.from(data['members'] as List? ?? const []);
-      for (final memberId in members) {
-        if (memberId != currentUserId) {
-          contacts.add(memberId);
-        }
-      }
-    }
-    return contacts.toList();
+    return _chatsRepository.getAcceptedDirectContactIds(currentUserId);
   }
 
   Future<void> markViewed(String statusId, {String? viewerUserId}) async {

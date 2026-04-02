@@ -4,6 +4,8 @@ import 'package:go_router/go_router.dart';
 
 import '../../../shared/widgets/messeya_ui.dart';
 import '../../auth/data/auth_repository.dart';
+import '../../companies/data/companies_repository.dart';
+import '../../companies/presentation/company_chats_tab.dart';
 import '../../linked_devices/data/linked_devices_repository.dart';
 import '../../settings/presentation/settings_page.dart';
 import '../../statuses/data/statuses_repository.dart';
@@ -21,12 +23,6 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   int _index = 0;
 
-  late final List<Widget> _pages = const [
-    HomeChatsTab(),
-    StatusesPage(),
-    SettingsPage(),
-  ];
-
   @override
   Widget build(BuildContext context) {
     final effectiveUserId = ref.watch(effectiveMessagingUserIdProvider);
@@ -38,73 +34,111 @@ class _HomePageState extends ConsumerState<HomePage> {
       (sum, chat) => sum + (chat.unreadCounts[effectiveUserId] ?? 0),
     );
     final unreadStatuses = ref.watch(unreadStatusesCountProvider);
-    
+    final companies =
+        ref.watch(currentUserCompaniesProvider).valueOrNull ?? const [];
+    final hasCompanyAccess = companies.isNotEmpty;
+    final companyUnread = hasCompanyAccess
+        ? companies.fold<int>(0, (sum, company) {
+            final companyChats =
+                ref.watch(companyChatsProvider(company.id)).valueOrNull ??
+                    const [];
+            return sum +
+                companyChats.fold<int>(
+                  0,
+                  (chatSum, chat) =>
+                      chatSum + (chat.unreadCounts[effectiveUserId] ?? 0),
+                );
+          })
+        : 0;
+
     final firebaseUser = ref.watch(currentUserProvider);
-    final isDesktopLinked = firebaseUser?.isAnonymous == true &&
-        effectiveUserId.isNotEmpty;
+    final isDesktopLinked =
+        firebaseUser?.isAnonymous == true && effectiveUserId.isNotEmpty;
+
+    final pages = <Widget>[
+      const HomeChatsTab(),
+      if (hasCompanyAccess) const CompanyChatsTab(),
+      const StatusesPage(),
+      const SettingsPage(),
+    ];
+    final navItems =
+        <({String label, IconData icon, IconData selectedIcon, int count})>[
+      (
+        label: 'Chats',
+        icon: Icons.chat_bubble_outline_rounded,
+        selectedIcon: Icons.chat_bubble_rounded,
+        count: unreadChats,
+      ),
+      if (hasCompanyAccess)
+        (
+          label: 'Empresa',
+          icon: Icons.apartment_outlined,
+          selectedIcon: Icons.apartment_rounded,
+          count: companyUnread,
+        ),
+      (
+        label: 'Estados',
+        icon: Icons.copy_all_outlined,
+        selectedIcon: Icons.copy_all_rounded,
+        count: unreadStatuses,
+      ),
+      (
+        label: 'Ajustes',
+        icon: Icons.settings_outlined,
+        selectedIcon: Icons.settings_rounded,
+        count: 0,
+      ),
+    ];
+    if (_index >= pages.length) {
+      _index = 0;
+    }
 
     return Scaffold(
       extendBody: true,
       body: IndexedStack(
         index: _index,
-        children: _pages,
+        children: pages,
       ),
-      floatingActionButton: _index == 0 
-        ? Padding(
-            padding: const EdgeInsets.only(bottom: 85), // Bajado para estar más cerca de la barra de Ajustes
-            child: FloatingActionButton.extended(
-              onPressed: isDesktopLinked ? null : () => context.push('/compose'),
-              backgroundColor: Colors.blue,
-              foregroundColor: Colors.white,
-              elevation: 6,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              icon: const Icon(Icons.edit_rounded),
-              label: const Text(
-                'Redactar',
-                style: TextStyle(fontWeight: FontWeight.bold),
+      // SOLO PARA LA PESTAÑA DE CHATS
+      floatingActionButton: _index == 0
+          ? Padding(
+              padding: const EdgeInsets.only(bottom: 0.1), // BAJADO PARA QUE SE VEA MEJOR EN CHATS
+              child: FloatingActionButton.extended(
+                onPressed:
+                    isDesktopLinked ? null : () => context.push('/compose'),
+                backgroundColor: Colors.blue,
+                foregroundColor: Colors.white,
+                elevation: 6,
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                icon: const Icon(Icons.edit_rounded),
+                label: const Text(
+                  'Redactar',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
               ),
-            ),
-          )
-        : null,
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       bottomNavigationBar: SafeArea(
         minimum: const EdgeInsets.fromLTRB(20, 0, 20, 20),
         child: MesseyaPanel(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           borderRadius: 34,
           child: Row(
-            children: [
-              Expanded(
+            children: List.generate(navItems.length, (index) {
+              final item = navItems[index];
+              return Expanded(
                 child: _NavItem(
-                  label: 'Chats',
-                  icon: Icons.chat_bubble_outline_rounded,
-                  selectedIcon: Icons.chat_bubble_rounded,
-                  selected: _index == 0,
-                  count: unreadChats,
-                  onTap: () => setState(() => _index = 0),
+                  label: item.label,
+                  icon: item.icon,
+                  selectedIcon: item.selectedIcon,
+                  selected: _index == index,
+                  count: item.count,
+                  onTap: () => setState(() => _index = index),
                 ),
-              ),
-              Expanded(
-                child: _NavItem(
-                  label: 'Estados',
-                  icon: Icons.copy_all_outlined,
-                  selectedIcon: Icons.copy_all_rounded,
-                  selected: _index == 1,
-                  count: unreadStatuses,
-                  onTap: () => setState(() => _index = 1),
-                ),
-              ),
-              Expanded(
-                child: _NavItem(
-                  label: 'Ajustes',
-                  icon: Icons.settings_outlined,
-                  selectedIcon: Icons.settings_rounded,
-                  selected: _index == 2,
-                  count: 0,
-                  onTap: () => setState(() => _index = 2),
-                ),
-              ),
-            ],
+              );
+            }),
           ),
         ),
       ),

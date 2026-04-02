@@ -71,9 +71,9 @@ class MesseyaPanel extends StatelessWidget {
   const MesseyaPanel({
     super.key,
     required this.child,
-    this.padding = const EdgeInsets.all(20),
+    this.padding = const EdgeInsets.all(16), // REDUCIDO DE 20
     this.margin,
-    this.borderRadius = 28,
+    this.borderRadius = 24, // REDUCIDO DE 28
   });
 
   final Widget child;
@@ -92,8 +92,8 @@ class MesseyaPanel extends StatelessWidget {
         boxShadow: const [
           BoxShadow(
             color: Color(0x44000000),
-            blurRadius: 32,
-            offset: Offset(0, 20),
+            blurRadius: 24, // REDUCIDO DE 32
+            offset: Offset(0, 12), // REDUCIDO DE 20
           ),
         ],
       ),
@@ -134,21 +134,21 @@ class MesseyaTopBar extends StatelessWidget {
             children: [
               Text(
                 title,
-                style: Theme.of(context).textTheme.headlineLarge?.copyWith(
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith( // CAMBIADO DE headlineLarge
                       color: Colors.white,
                       fontWeight: FontWeight.w800,
                       height: 1,
                     ),
               ),
               if (subtitle != null) ...[
-                const SizedBox(height: 10),
+                const SizedBox(height: 8), // REDUCIDO DE 10
                 subtitle!,
               ],
             ],
           ),
         ),
         if (actions.isNotEmpty) ...[
-          const SizedBox(width: 16),
+          const SizedBox(width: 12), // REDUCIDO DE 16
           Row(children: actions),
         ],
       ],
@@ -161,29 +161,40 @@ class MesseyaRoundIconButton extends StatelessWidget {
     super.key,
     required this.icon,
     this.onTap,
+    this.tooltip,
   });
 
   final IconData icon;
   final VoidCallback? onTap;
+  final String? tooltip;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 12),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(24),
-        child: Ink(
-          width: 58,
-          height: 58,
-          decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.05),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
-          ),
-          child: Icon(icon, color: Colors.white, size: 28),
+    Widget button = InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20), // REDUCIDO DE 24
+      child: Ink(
+        width: 48, // REDUCIDO DE 58
+        height: 48, // REDUCIDO DE 58
+        decoration: BoxDecoration(
+          color: Colors.white.withValues(alpha: 0.05),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
         ),
+        child: Icon(icon, color: Colors.white, size: 24), // REDUCIDO DE 28
       ),
+    );
+
+    if (tooltip != null) {
+      button = Tooltip(
+        message: tooltip!,
+        child: button,
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 10), // REDUCIDO DE 12
+      child: button,
     );
   }
 }
@@ -205,27 +216,28 @@ class MesseyaSearchField extends StatelessWidget {
     return TextField(
       controller: controller,
       onChanged: onChanged,
-      style: const TextStyle(color: Colors.white, fontSize: 18),
+      style: const TextStyle(color: Colors.white, fontSize: 16), // REDUCIDO DE 18
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: const TextStyle(
           color: MesseyaUi.textMuted,
-          fontSize: 18,
+          fontSize: 16, // REDUCIDO DE 18
         ),
         prefixIcon:
-            const Icon(Icons.search_rounded, color: MesseyaUi.textMuted),
+            const Icon(Icons.search_rounded, color: MesseyaUi.textMuted, size: 22), // AÑADIDO SIZE
         filled: true,
         fillColor: Colors.white.withValues(alpha: 0.04),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // AJUSTADO
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(22), // REDUCIDO DE 26
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(22),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(26),
+          borderRadius: BorderRadius.circular(22),
           borderSide: const BorderSide(color: MesseyaUi.accentSoft, width: 1.2),
         ),
       ),
@@ -246,7 +258,7 @@ class MesseyaSectionLabel extends StatelessWidget {
         Expanded(
           child: Text(
             label,
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            style: Theme.of(context).textTheme.titleMedium?.copyWith( // CAMBIADO DE titleLarge
                   color: MesseyaUi.textMuted,
                   fontWeight: FontWeight.w600,
                 ),
@@ -278,7 +290,7 @@ class MesseyaPillButton extends StatelessWidget {
       onTap: onTap,
       borderRadius: BorderRadius.circular(999),
       child: Ink(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10), // REDUCIDO
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(999),
           gradient: filled
@@ -292,14 +304,15 @@ class MesseyaPillButton extends StatelessWidget {
           mainAxisSize: MainAxisSize.min,
           children: [
             if (icon != null) ...[
-              Icon(icon, color: Colors.white, size: 18),
-              const SizedBox(width: 8),
+              Icon(icon, color: Colors.white, size: 16), // REDUCIDO DE 18
+              const SizedBox(width: 6), // REDUCIDO DE 8
             ],
             Text(
               label,
               style: const TextStyle(
                 color: Colors.white,
                 fontWeight: FontWeight.w700,
+                fontSize: 13, // AÑADIDO
               ),
             ),
           ],

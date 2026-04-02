@@ -13,6 +13,9 @@ import '../features/chats/presentation/create_space_page.dart';
 import '../features/chats/presentation/home_page.dart';
 import '../features/chats/presentation/archived_chats_page.dart';
 import '../features/chats/presentation/space_info_page.dart';
+import '../features/companies/presentation/company_admin_page.dart';
+import '../features/companies/presentation/create_company_page.dart';
+import '../features/companies/presentation/edit_company_profile_page.dart';
 import '../features/linked_devices/presentation/desktop_link_page.dart';
 import '../features/linked_devices/presentation/link_desktop_scan_page.dart';
 import '../features/linked_devices/presentation/linked_devices_page.dart';
@@ -21,6 +24,7 @@ import '../features/messages/presentation/compose_page.dart';
 import '../features/messages/presentation/drafts_page.dart';
 import '../features/profile/presentation/blocked_contacts_page.dart';
 import '../features/profile/presentation/contact_info_page.dart';
+import '../features/profile/presentation/contacts_page.dart';
 import '../features/profile/presentation/edit_profile_page.dart';
 import '../features/search/presentation/search_page.dart';
 import '../features/settings/presentation/legal_document_page.dart';
@@ -47,14 +51,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       final isAnonymous = user?.isAnonymous ?? false;
       final isWindowsDesktop =
           !kIsWeb && defaultTargetPlatform == TargetPlatform.windows;
+      final isLinkedWebSession = kIsWeb &&
+          user != null &&
+          user.isAnonymous &&
+          preferences.getDesktopLinkedOwnerUid().isNotEmpty &&
+          preferences.getDesktopLinkedDeviceId().isNotEmpty;
       final isDeprecatedAuthRoute = state.matchedLocation == '/register' ||
           state.matchedLocation == '/login/phone';
       if (isDeprecatedAuthRoute) {
         return '/login';
       }
       final isAuthRoute = state.matchedLocation == '/login' ||
-          state.matchedLocation == '/desktop-link';
+          state.matchedLocation == '/desktop-link' ||
+          state.matchedLocation == '/web-link';
       final isDesktopLinkRoute = state.matchedLocation == '/desktop-link';
+      final isWebLinkRoute = state.matchedLocation == '/web-link';
       final hasDesktopLink = preferences.getDesktopLinkedDeviceId().isNotEmpty;
 
       if (isWindowsDesktop && (!isLoggedIn || isAnonymous)) {
@@ -65,6 +76,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           return '/desktop-link';
         }
         return null;
+      }
+
+      if (kIsWeb && (!isLoggedIn || (isAnonymous && !isLinkedWebSession))) {
+        if (!isWebLinkRoute) {
+          return '/web-link';
+        }
+        return null;
+      }
+
+      if (kIsWeb && isWebLinkRoute && isLoggedIn) {
+        return '/home';
       }
 
       if (!isLoggedIn && !isAuthRoute) {
@@ -83,7 +105,33 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/desktop-link',
         builder: (context, state) => const DesktopLinkPage(),
       ),
+      GoRoute(
+        path: '/web-link',
+        builder: (context, state) => const DesktopLinkPage(),
+      ),
       GoRoute(path: '/home', builder: (context, state) => const HomePage()),
+      GoRoute(
+        path: '/companies/create',
+        builder: (context, state) => const CreateSpacePage(),
+      ),
+      GoRoute(
+        path: '/companies/:companyId/admin',
+        builder: (context, state) {
+          final companyId = state.pathParameters['companyId'] ?? '';
+          final focusBilling = state.uri.queryParameters['focusBilling'] == '1';
+          return CompanyAdminPage(
+            companyId: companyId,
+            focusBilling: focusBilling,
+          );
+        },
+      ),
+      GoRoute(
+        path: '/companies/:companyId/profile',
+        builder: (context, state) {
+          final companyId = state.pathParameters['companyId'] ?? '';
+          return EditCompanyProfilePage(companyId: companyId);
+        },
+      ),
       GoRoute(
         path: '/compose',
         builder: (context, state) {
@@ -94,6 +142,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/drafts',
         builder: (context, state) => const DraftsPage(),
+      ),
+      GoRoute(
+        path: '/contacts',
+        builder: (context, state) => const ContactsPage(),
       ),
       GoRoute(
         path: '/spaces/create',
@@ -159,7 +211,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: '/contact/:userId',
         builder: (context, state) {
           final userId = state.pathParameters['userId'] ?? '';
-          return ContactInfoPage(userId: userId);
+          final companyId = state.uri.queryParameters['companyId'] ?? '';
+          return ContactInfoPage(
+            userId: userId,
+            companyId: companyId,
+          );
         },
       ),
       GoRoute(
@@ -170,6 +226,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           final otherUserName = state.uri.queryParameters['name'] ?? 'Chat';
           final otherUsername = state.uri.queryParameters['username'] ?? '';
           final otherUserPhoto = state.uri.queryParameters['photo'] ?? '';
+          final companyId = state.uri.queryParameters['companyId'] ?? '';
 
           return ChatPage(
             chatId: chatId,
@@ -177,6 +234,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             otherUserName: otherUserName,
             otherUsername: otherUsername,
             otherUserPhoto: otherUserPhoto,
+            companyId: companyId,
           );
         },
       ),

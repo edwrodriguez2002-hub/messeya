@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../core/firebase/firebase_providers.dart';
 import '../../../core/services/cloudinary_media_service.dart';
+import '../../../core/services/encryption_service.dart';
 import '../../../shared/models/app_user.dart';
 
 final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
@@ -13,6 +14,7 @@ final profileRepositoryProvider = Provider<ProfileRepository>((ref) {
     ref.watch(firestoreProvider),
     ref.watch(cloudinaryMediaServiceProvider),
     ref.watch(firebaseAuthProvider),
+    ref.watch(encryptionServiceProvider),
   );
 });
 
@@ -26,11 +28,12 @@ final userProfileProvider =
 });
 
 class ProfileRepository {
-  ProfileRepository(this._firestore, this._cloudinary, this._auth);
+  ProfileRepository(this._firestore, this._cloudinary, this._auth, this._encryption);
 
   final FirebaseFirestore _firestore;
   final CloudinaryMediaService _cloudinary;
   final FirebaseAuth _auth;
+  final EncryptionService _encryption;
 
   CollectionReference<Map<String, dynamic>> get _users =>
       _firestore.collection('users');
@@ -57,10 +60,15 @@ class ProfileRepository {
   }
 
   Future<void> createUserProfile(AppUser user) async {
+    // Generar claves E2EE al crear el perfil
+    final publicKey = await _encryption.generateAndStoreKeyPair(user.uid);
+    // IMPORTANTE: isVerified siempre es false por defecto al crear
+    final userWithKey = user.copyWith(publicKey: publicKey, isVerified: false);
+
     await _reserveUsernameAndSaveProfile(
-      uid: user.uid,
-      username: user.username,
-      data: user.toMap(),
+      uid: userWithKey.uid,
+      username: userWithKey.username,
+      data: userWithKey.toMap(),
     );
   }
 
@@ -77,38 +85,40 @@ class ProfileRepository {
     if (doc.exists) {
       final data = doc.data()!;
       final currentUsername = data['username'] as String? ?? '';
+      final currentPublicKey = data['publicKey'] as String? ?? '';
       
-      // Si el usuario ya existe pero no tiene username (identificador), lo generamos ahora
+      // VERIFICACIÓN DE LLAVES E2EE (Solución a reinstalaciones)
+      final hasLocalKey = await _encryption.hasPrivateKey(uid);
+      
+      Map<String, dynamic> updates = {
+        'email': email,
+        'name': name,
+        'photoUrl': photoUrl.isNotEmpty ? photoUrl : (data['photoUrl'] ?? ''),
+        'isOnline': true,
+        'lastSeen': FieldValue.serverTimestamp(),
+      };
+
+      // Si el usuario no tiene llave pública en Firestore O si reinstaló la app (no tiene llave privada local),
+      // generamos un par nuevo y actualizamos Firestore.
+      if (currentPublicKey.isEmpty || !hasLocalKey) {
+        updates['publicKey'] = await _encryption.generateAndStoreKeyPair(uid);
+      }
+      
       if (currentUsername.isEmpty) {
         final newUsername = await _generateUniqueUsername(
           desiredUsername ?? email.split('@').first,
         );
+        updates['username'] = newUsername;
+        updates['usernameLower'] = newUsername.toLowerCase();
+        
         await _reserveUsernameAndSaveProfile(
           uid: uid,
           username: newUsername,
-          data: {
-            'email': email,
-            'name': name,
-            'username': newUsername,
-            'usernameLower': newUsername.toLowerCase(),
-            'photoUrl': photoUrl.isNotEmpty ? photoUrl : (data['photoUrl'] ?? ''),
-            'isOnline': true,
-            'lastSeen': FieldValue.serverTimestamp(),
-          },
+          data: updates,
           merge: true,
         );
       } else {
-        // Si ya tiene todo, solo actualizamos lo básico
-        await _users.doc(uid).set(
-          {
-            'email': email,
-            'name': name,
-            'photoUrl': photoUrl.isNotEmpty ? photoUrl : (data['photoUrl'] ?? ''),
-            'isOnline': true,
-            'lastSeen': FieldValue.serverTimestamp(),
-          },
-          SetOptions(merge: true),
-        );
+        await _users.doc(uid).set(updates, SetOptions(merge: true));
       }
       return;
     }
@@ -117,6 +127,9 @@ class ProfileRepository {
     final username = await _generateUniqueUsername(
       desiredUsername ?? email.split('@').first,
     );
+    
+    final publicKey = await _encryption.generateAndStoreKeyPair(uid);
+
     final user = AppUser(
       uid: uid,
       username: username,
@@ -128,6 +141,8 @@ class ProfileRepository {
       createdAt: DateTime.now(),
       isOnline: true,
       lastSeen: DateTime.now(),
+      publicKey: publicKey,
+      isVerified: false, // Por defecto siempre false
     );
     await createUserProfile(user);
   }
@@ -139,11 +154,13 @@ class ProfileRepository {
   }) async {
     String photoUrl = '';
     String currentUsername = '';
+    String currentPublicKey = '';
     final snapshot = await _users.doc(_uid).get();
     if (snapshot.exists) {
-      final currentUser = AppUser.fromDoc(snapshot);
-      photoUrl = currentUser.photoUrl;
-      currentUsername = currentUser.usernameLower;
+      final data = snapshot.data()!;
+      photoUrl = data['photoUrl'] as String? ?? '';
+      currentUsername = (data['username'] as String? ?? '').toLowerCase();
+      currentPublicKey = data['publicKey'] as String? ?? '';
     }
 
     if (imageFile != null) {
@@ -152,6 +169,11 @@ class ProfileRepository {
         folder: 'messeya/profile_photos',
         publicId: _uid,
       );
+    }
+
+    final hasLocalKey = await _encryption.hasPrivateKey(_uid);
+    if (currentPublicKey.isEmpty || !hasLocalKey) {
+      currentPublicKey = await _encryption.generateAndStoreKeyPair(_uid);
     }
 
     await _users.doc(_uid).set(
@@ -165,6 +187,7 @@ class ProfileRepository {
         'photoUrl': photoUrl,
         'lastSeen': FieldValue.serverTimestamp(),
         'isOnline': true,
+        'publicKey': currentPublicKey,
       },
       SetOptions(merge: true),
     );
@@ -194,7 +217,6 @@ class ProfileRepository {
           RegExp(r'[^a-z0-9_]'),
           '',
         );
-    // Bajamos el límite a 2 caracteres para soportar correos cortos
     if (normalized.length < 2) {
       return 'user_${DateTime.now().millisecondsSinceEpoch.toString().substring(10)}';
     }

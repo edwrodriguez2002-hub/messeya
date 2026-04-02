@@ -101,9 +101,10 @@ class LinkedDevicesRepository {
   Future<String> createPairingSession({
     required String platform,
     required String deviceLabel,
+    Duration expiresIn = const Duration(minutes: 10),
   }) async {
     final sessionRef = _pairingSessions.doc();
-    final expiresAt = DateTime.now().add(const Duration(minutes: 10));
+    final expiresAt = DateTime.now().add(expiresIn);
     await sessionRef.set({
       'creatorUid': _uid,
       'platform': platform,
@@ -141,8 +142,8 @@ class LinkedDevicesRepository {
       if (!session.isPending) {
         throw Exception('La solicitud ya no esta disponible.');
       }
-      if (session.platform != 'windows') {
-        throw Exception('Ese QR no corresponde a una sesion de Windows.');
+      if (session.platform != 'windows' && session.platform != 'web') {
+        throw Exception('Ese QR no corresponde a una sesion compatible.');
       }
 
       final linkedDeviceRef =

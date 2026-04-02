@@ -14,7 +14,7 @@ class Message {
     required this.deletedForAll,
     required this.attachmentUrl,
     required this.fileName,
-    this.attachments = const [], // Nueva lista para múltiples archivos
+    this.attachments = const [],
     required this.reactions,
     required this.replyToMessageId,
     required this.replyToText,
@@ -34,6 +34,7 @@ class Message {
     this.priority = 'normal',
     this.seenAt = const {},
     this.deliveredAt = const {},
+    this.isEncrypted = false, // Nuevo campo
   });
 
   final String id;
@@ -48,7 +49,7 @@ class Message {
   final bool deletedForAll;
   final String attachmentUrl;
   final String fileName;
-  final List<MessageAttachment> attachments; // Lista de adjuntos estructurada
+  final List<MessageAttachment> attachments;
   final Map<String, List<String>> reactions;
   final String replyToMessageId;
   final String replyToText;
@@ -68,6 +69,7 @@ class Message {
   final String priority;
   final Map<String, DateTime> seenAt;
   final Map<String, DateTime> deliveredAt;
+  final bool isEncrypted;
 
   factory Message.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
     final map = doc.data() ?? <String, dynamic>{};
@@ -109,6 +111,7 @@ class Message {
       priority: map['priority'] as String? ?? 'normal',
       seenAt: _mapTimestamps(map['seenAt']),
       deliveredAt: _mapTimestamps(map['deliveredAt']),
+      isEncrypted: map['isEncrypted'] as bool? ?? false,
     );
   }
 
@@ -145,6 +148,7 @@ class Message {
       'priority': priority,
       'seenAt': seenAt.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
       'deliveredAt': deliveredAt.map((k, v) => MapEntry(k, Timestamp.fromDate(v))),
+      'isEncrypted': isEncrypted,
     };
   }
 
@@ -167,7 +171,7 @@ class Message {
 class MessageAttachment {
   final String url;
   final String name;
-  final String type; // image, video, file
+  final String type;
 
   MessageAttachment({required this.url, required this.name, required this.type});
 

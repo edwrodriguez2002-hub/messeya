@@ -1,21 +1,22 @@
 class BackendConfig {
   const BackendConfig._();
 
-  static const String apiBaseUrl = String.fromEnvironment(
-    'MESSEYA_API_BASE_URL',
-    defaultValue: '',
+  // El backend legado para notificaciones/chat ya no se usa en la app.
+  static const String apiBaseUrl = '';
+
+  static bool get hasApiBaseUrl => false;
+
+  static const String companySubscriptionProductId = String.fromEnvironment(
+    'MESSEYA_COMPANY_SUBSCRIPTION_PRODUCT_ID',
+    defaultValue: 'company_chat_business',
   );
 
-  static bool get hasApiBaseUrl => apiBaseUrl.trim().isNotEmpty;
+  static const String androidPackageName = String.fromEnvironment(
+    'MESSEYA_ANDROID_PACKAGE_NAME',
+    defaultValue: 'com.messeya.chat',
+  );
 
   static Uri buildUri(String path) {
-    final base = apiBaseUrl.trim();
-    if (base.isEmpty) {
-      throw StateError('MESSEYA_API_BASE_URL no esta configurado.');
-    }
-    final normalizedBase =
-        base.endsWith('/') ? base.substring(0, base.length - 1) : base;
-    final normalizedPath = path.startsWith('/') ? path : '/$path';
-    return Uri.parse('$normalizedBase$normalizedPath');
+    throw StateError('El backend legado ha sido desactivado en favor de Stream Chat.');
   }
 }

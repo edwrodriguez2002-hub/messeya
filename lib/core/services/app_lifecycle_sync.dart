@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/services/hybrid_sync_service.dart';
+import '../../core/services/stream_chat_service.dart';
 import '../../features/profile/data/profile_repository.dart';
 
 class AppLifecycleSync extends ConsumerStatefulWidget {
@@ -22,14 +24,14 @@ class _AppLifecycleSyncState extends ConsumerState<AppLifecycleSync>
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _syncOnlineStatus(true);
+      _syncRealtimeState(true);
     });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _syncOnlineStatus(false);
+    _syncRealtimeState(false);
     super.dispose();
   }
 
@@ -37,20 +39,25 @@ class _AppLifecycleSyncState extends ConsumerState<AppLifecycleSync>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     final isOnline = switch (state) {
       AppLifecycleState.resumed => true,
-      AppLifecycleState.inactive => false,
+      AppLifecycleState.inactive => true,
       AppLifecycleState.hidden => false,
       AppLifecycleState.paused => false,
       AppLifecycleState.detached => false,
     };
-    _syncOnlineStatus(isOnline);
+    _syncRealtimeState(isOnline);
   }
 
-  void _syncOnlineStatus(bool isOnline) {
+  void _syncRealtimeState(bool isOnline) {
     Future<void>(() async {
       try {
+        await ref.read(streamChatServiceProvider).setAppActive(isOnline);
         await ref.read(profileRepositoryProvider).setOnlineStatus(
               isOnline: isOnline,
             );
+        if (isOnline) {
+          await ref.read(hybridSyncServiceProvider).flushPendingToCloud();
+          await ref.read(hybridSyncServiceProvider).flushPendingToMesh();
+        }
       } catch (_) {}
     });
   }
