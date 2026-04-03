@@ -34,11 +34,19 @@ function loadEnvFile(envPath) {
 
 loadEnvFile(path.join(__dirname, "..", "..", ".env.local"));
 
+function normalizeEnvMultiline(value) {
+  return String(value || "").replace(/\\n/g, "\n").trim();
+}
+
 const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || "";
 const firebaseClientEmail = process.env.FIREBASE_CLIENT_EMAIL || "";
-const firebasePrivateKey = process.env.FIREBASE_PRIVATE_KEY || "";
+const firebasePrivateKey = normalizeEnvMultiline(
+  process.env.FIREBASE_PRIVATE_KEY,
+);
 const playClientEmail = process.env.GOOGLE_PLAY_CLIENT_EMAIL || "";
-const playPrivateKey = process.env.GOOGLE_PLAY_PRIVATE_KEY || "";
+const playPrivateKey = normalizeEnvMultiline(
+  process.env.GOOGLE_PLAY_PRIVATE_KEY,
+);
 const playPackageName =
   process.env.GOOGLE_PLAY_PACKAGE_NAME || process.env.MESSEYA_ANDROID_PACKAGE_NAME || "com.messeya.chat";
 const fallbackProductId =
