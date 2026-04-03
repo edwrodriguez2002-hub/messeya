@@ -273,7 +273,7 @@ async function sendComposeEmailInvite({decodedToken, body}) {
   const invitationRef = db.collection("email_invitations").doc();
   const createdAt = admin.firestore.FieldValue.serverTimestamp();
 
-  await invitationRef.set({
+  await safeMerge(invitationRef, {
     id: invitationRef.id,
     type: "compose_external_email",
     recipientEmail,
@@ -357,10 +357,10 @@ function dispatchComposeInviteEmail({
 }) {
   Promise.resolve()
       .then(async () => {
-        await invitationRef.set({
+        await safeMerge(invitationRef, {
           status: "sending",
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        }, {merge: true});
+        });
 
         const emailResult = await resend.emails.send({
           from: resendFromEmail,
@@ -370,20 +370,28 @@ function dispatchComposeInviteEmail({
           text,
         });
 
-        await invitationRef.set({
+        await safeMerge(invitationRef, {
           status: "sent",
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           resendEmailId: emailResult.data?.id || "",
-        }, {merge: true});
+        });
       })
       .catch(async (error) => {
         console.error("No se pudo enviar la invitacion externa:", error);
-        await invitationRef.set({
+        await safeMerge(invitationRef, {
           status: "failed",
           updatedAt: admin.firestore.FieldValue.serverTimestamp(),
           errorMessage: String(error?.message || error || "Error desconocido"),
-        }, {merge: true});
+        });
       });
+}
+
+async function safeMerge(ref, data) {
+  try {
+    await ref.set(data, {merge: true});
+  } catch (error) {
+    console.warn("No se pudo guardar la invitacion en Firestore:", error);
+  }
 }
 
 async function fetchPlaySubscription({purchaseToken, productId}) {
