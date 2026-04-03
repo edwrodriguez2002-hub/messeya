@@ -248,43 +248,14 @@ async function sendComposeEmailInvite({decodedToken, body}) {
     throw createHttpError(400, "No hay contenido para enviar.");
   }
 
-  const existingUserSnap = await safeGetExistingUserByEmail(recipientEmail);
-  if (existingUserSnap && !existingUserSnap.empty) {
-    throw createHttpError(
-      409,
-      "Ese correo ya pertenece a un usuario de Messeya. Envialo como mensaje interno.",
-    );
-  }
-
-  const senderData = await safeGetSenderData(decodedToken.uid);
   const senderName = String(
-      senderData.name || decodedToken.name || "Un contacto de Messeya",
+      decodedToken.name || decodedToken.email || "Un contacto de Messeya",
   ).trim();
-  const senderUsername = String(senderData.username || "").trim();
+  const senderUsername = "";
   const senderEmail = String(
-      senderData.email || decodedToken.email || "",
+      decodedToken.email || "",
   ).trim().toLowerCase();
   const subjectLine = subject || `Nuevo mensaje de ${senderName} en Messeya`;
-  const invitationRef = db.collection("email_invitations").doc();
-  const createdAt = admin.firestore.FieldValue.serverTimestamp();
-
-  await safeMerge(invitationRef, {
-    id: invitationRef.id,
-    type: "compose_external_email",
-    recipientEmail,
-    recipientEmailLower: recipientEmail,
-    senderUid: decodedToken.uid,
-    senderName,
-    senderUsername,
-    senderEmail,
-    subject,
-    body: messageBody,
-    attachmentNames,
-    installUrl: playStoreUrl,
-    status: "pending",
-    createdAt,
-    updatedAt: createdAt,
-  });
 
   const senderHandle = senderUsername ? `@${senderUsername}` : senderEmail;
   const attachmentNote = attachmentNames.length > 0 ?
@@ -321,7 +292,6 @@ async function sendComposeEmailInvite({decodedToken, body}) {
   ].filter(Boolean).join("\n");
 
   void dispatchComposeInviteEmail({
-    invitationRef,
     resend,
     resendFromEmail,
     recipientEmail,
@@ -334,7 +304,7 @@ async function sendComposeEmailInvite({decodedToken, body}) {
     statusCode: 202,
     payload: {
       ok: true,
-      invitationId: invitationRef.id,
+      invitationId: "",
       recipientEmail,
       queued: true,
     },
@@ -342,7 +312,6 @@ async function sendComposeEmailInvite({decodedToken, body}) {
 }
 
 function dispatchComposeInviteEmail({
-  invitationRef,
   resend,
   resendFromEmail,
   recipientEmail,
@@ -352,11 +321,6 @@ function dispatchComposeInviteEmail({
 }) {
   Promise.resolve()
       .then(async () => {
-        await safeMerge(invitationRef, {
-          status: "sending",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-        });
-
         const emailResult = await resend.emails.send({
           from: resendFromEmail,
           to: [recipientEmail],
@@ -364,20 +328,13 @@ function dispatchComposeInviteEmail({
           html,
           text,
         });
-
-        await safeMerge(invitationRef, {
-          status: "sent",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        console.log("Invitacion externa enviada por Resend:", {
+          recipientEmail,
           resendEmailId: emailResult.data?.id || "",
         });
       })
       .catch(async (error) => {
         console.error("No se pudo enviar la invitacion externa:", error);
-        await safeMerge(invitationRef, {
-          status: "failed",
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-          errorMessage: String(error?.message || error || "Error desconocido"),
-        });
       });
 }
 
@@ -389,28 +346,6 @@ async function safeMerge(ref, data) {
   }
 }
 
-async function safeGetExistingUserByEmail(email) {
-  try {
-    return await db
-        .collection("users")
-        .where("email", "==", email)
-        .limit(1)
-        .get();
-  } catch (error) {
-    console.warn("No se pudo verificar si el correo ya existe en Firestore:", error);
-    return null;
-  }
-}
-
-async function safeGetSenderData(uid) {
-  try {
-    const senderSnap = await db.collection("users").doc(uid).get();
-    return senderSnap.data() || {};
-  } catch (error) {
-    console.warn("No se pudo cargar el perfil del remitente desde Firestore:", error);
-    return {};
-  }
-}
 
 async function fetchPlaySubscription({purchaseToken, productId}) {
   const authClient = await playAuth.getClient();
