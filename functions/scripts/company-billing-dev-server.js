@@ -328,9 +328,15 @@ function dispatchComposeInviteEmail({
           html,
           text,
         });
+        if (!emailResult || emailResult.error || !emailResult.data) {
+          throw new Error(
+              emailResult?.error?.message ||
+              "Resend no devolvio confirmacion del envio.",
+          );
+        }
         console.log("Invitacion externa enviada por Resend:", {
           recipientEmail,
-          resendEmailId: emailResult.data?.id || "",
+          resendEmailId: emailResult.data.id,
         });
       })
       .catch(async (error) => {
