@@ -714,7 +714,7 @@ class MessagesRepository {
                   .toList(),
             }),
           )
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 110));
 
       if (response.statusCode < 200 || response.statusCode >= 300) {
         String message = 'No se pudo enviar la invitacion por correo.';
@@ -733,7 +733,7 @@ class MessagesRepository {
       }
     } on TimeoutException {
       throw StateError(
-        'El backend tardo demasiado en enviar la invitacion por correo.',
+        'El backend de correo tardo demasiado en responder. Si el servicio estaba dormido, espera un momento y vuelve a intentar.',
       );
     } on StateError {
       rethrow;

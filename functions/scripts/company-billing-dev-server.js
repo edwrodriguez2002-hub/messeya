@@ -318,28 +318,65 @@ async function sendComposeEmailInvite({decodedToken, body}) {
     `Instala la app: ${playStoreUrl}`,
   ].filter(Boolean).join("\n");
 
-  const emailResult = await resend.emails.send({
-    from: resendFromEmail,
-    to: [recipientEmail],
-    subject: subjectLine,
+  void dispatchComposeInviteEmail({
+    invitationRef,
+    resend,
+    resendFromEmail,
+    recipientEmail,
+    subjectLine,
     html,
     text,
   });
 
-  await invitationRef.set({
-    status: "sent",
-    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-    resendEmailId: emailResult.data?.id || "",
-  }, {merge: true});
-
   return {
-    statusCode: 200,
+    statusCode: 202,
     payload: {
       ok: true,
       invitationId: invitationRef.id,
       recipientEmail,
+      queued: true,
     },
   };
+}
+
+function dispatchComposeInviteEmail({
+  invitationRef,
+  resend,
+  resendFromEmail,
+  recipientEmail,
+  subjectLine,
+  html,
+  text,
+}) {
+  Promise.resolve()
+      .then(async () => {
+        await invitationRef.set({
+          status: "sending",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        }, {merge: true});
+
+        const emailResult = await resend.emails.send({
+          from: resendFromEmail,
+          to: [recipientEmail],
+          subject: subjectLine,
+          html,
+          text,
+        });
+
+        await invitationRef.set({
+          status: "sent",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          resendEmailId: emailResult.data?.id || "",
+        }, {merge: true});
+      })
+      .catch(async (error) => {
+        console.error("No se pudo enviar la invitacion externa:", error);
+        await invitationRef.set({
+          status: "failed",
+          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          errorMessage: String(error?.message || error || "Error desconocido"),
+        }, {merge: true});
+      });
 }
 
 async function fetchPlaySubscription({purchaseToken, productId}) {
