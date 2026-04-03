@@ -36,7 +36,14 @@ function loadEnvFile(envPath) {
 loadEnvFile(path.join(__dirname, "..", "..", ".env.local"));
 
 function normalizeEnvMultiline(value) {
-  return String(value || "").replace(/\\n/g, "\n").trim();
+  let normalized = String(value || "").trim();
+  if (
+    (normalized.startsWith('"') && normalized.endsWith('"')) ||
+    (normalized.startsWith("'") && normalized.endsWith("'"))
+  ) {
+    normalized = normalized.slice(1, -1);
+  }
+  return normalized.replace(/\\n/g, "\n").trim();
 }
 
 const firebaseProjectId = process.env.FIREBASE_PROJECT_ID || "";
