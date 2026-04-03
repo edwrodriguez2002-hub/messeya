@@ -75,19 +75,30 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             value: me,
             data: (user) {
               if (user == null) return const Center(child: Text('No se encontró el perfil.'));
+              final hasVerificationAccess =
+                  ProfileRepository.hasVerificationAccess(user);
 
               return ListView(
                 padding: const EdgeInsets.fromLTRB(20, 18, 20, 160),
                 children: [
                   MesseyaTopBar(
                     title: 'Ajustes',
-                    subtitle: const Text('Gestiona tu identidad y experiencia de correo moderno.', style: TextStyle(color: MesseyaUi.textMuted, fontSize: 15)),
+                    subtitle: Text(
+                      'Gestiona tu identidad y experiencia de correo moderno.',
+                      style: TextStyle(
+                        color: MesseyaUi.textMutedFor(context),
+                        fontSize: 15,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 18),
                   _ProfileHero(
                     name: user.name,
                     username: user.username,
                     photoUrl: user.photoUrl,
+                    isVerified: user.isVerified,
+                    verificationLabel:
+                        user.isVerified ? 'Cuenta verificada' : 'Cuenta estándar',
                     onEdit: () => context.push('/profile/edit'),
                   ),
                   const SizedBox(height: 18),
@@ -103,23 +114,42 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text('Firma Automática', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                        Text(
+                          'Firma Automática',
+                          style: TextStyle(
+                            color: MesseyaUi.textPrimaryFor(context),
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                         const SizedBox(height: 8),
                         TextField(
                           controller: _signatureController,
-                          style: const TextStyle(color: Colors.white, fontSize: 14),
+                          style: TextStyle(
+                            color: MesseyaUi.textPrimaryFor(context),
+                            fontSize: 14,
+                          ),
                           maxLines: 2,
                           decoration: InputDecoration(
                             hintText: 'Ej: Saludos cordiales, ${user.name}',
-                            hintStyle: const TextStyle(color: Colors.white24),
+                            hintStyle: TextStyle(
+                              color: MesseyaUi.textMutedFor(context),
+                            ),
                             filled: true,
-                            fillColor: Colors.white.withOpacity(0.05),
+                            fillColor: MesseyaUi.isDark(context)
+                                ? Colors.white.withValues(alpha: 0.05)
+                                : Colors.black.withValues(alpha: 0.04),
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                           ),
                           onChanged: (val) => preferences.setUserSignature(val),
                         ),
                         const SizedBox(height: 12),
-                        const Text('Se añadirá automáticamente al final de tus correos.', style: TextStyle(color: MesseyaUi.textMuted, fontSize: 11)),
+                        Text(
+                          'Se añadirá automáticamente al final de tus correos.',
+                          style: TextStyle(
+                            color: MesseyaUi.textMutedFor(context),
+                            fontSize: 11,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -132,6 +162,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       children: [
                         _Tile(icon: Icons.person_outline_rounded, iconColor: const Color(0xFF72D0FF), title: 'Perfil', subtitle: 'Nombre, foto y biografía', onTap: () => context.push('/profile/edit')),
                         _Tile(icon: Icons.apartment_rounded, iconColor: const Color(0xFF7DB7FF), title: primaryCompany == null ? 'Crear empresa' : 'Panel empresa', subtitle: primaryCompany == null ? 'Espacio empresarial pago' : 'Administrar ${primaryCompany.name}', onTap: () => context.push(primaryCompany == null ? '/companies/create' : '/companies/${primaryCompany.id}/admin')),
+                        if (hasVerificationAccess)
+                          _Tile(
+                            icon: Icons.verified_user_rounded,
+                            iconColor: const Color(0xFF5EA8FF),
+                            title: 'Usuarios verificados',
+                            subtitle: 'Marcar o quitar verificación',
+                            onTap: () => context.push('/settings/user-verification'),
+                          ),
                         _Tile(icon: Icons.devices_outlined, iconColor: const Color(0xFFFFC56D), title: 'Dispositivos', subtitle: 'Sesiones vinculadas', onTap: () => context.push('/settings/linked-devices')),
                         _Tile(icon: Icons.person_add_alt_rounded, iconColor: const Color(0xFF7DE2A7), title: 'Invitar amigos', subtitle: 'Compartir enlace de la app', onTap: _shareApp),
                       ],
@@ -224,7 +262,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                           },
                         ),
                         const SizedBox(height: 12),
-                        _InlineThemeSelector(
+                        _ThemeSection(
                           themeMode: themeMode,
                           onThemeChanged: (selection) => ref.read(themeModeProvider.notifier).setThemeMode(selection),
                         ),
@@ -252,14 +290,23 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 }
 
 class _ProfileHero extends StatelessWidget {
-  const _ProfileHero({required this.name, required this.username, required this.photoUrl, required this.onEdit});
-  final String name; final String username; final String photoUrl; final VoidCallback onEdit;
+  const _ProfileHero({required this.name, required this.username, required this.photoUrl, required this.onEdit, required this.isVerified, required this.verificationLabel});
+  final String name; final String username; final String photoUrl; final VoidCallback onEdit; final bool isVerified; final String verificationLabel;
   @override
   Widget build(BuildContext context) {
     return MesseyaPanel(
       padding: const EdgeInsets.all(0),
       child: Container(
-        decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Colors.white.withOpacity(0.06), MesseyaUi.accent.withOpacity(0.08)])),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Colors.white.withValues(alpha: 0.06),
+              MesseyaUi.accent.withValues(alpha: 0.08),
+            ],
+          ),
+        ),
         padding: const EdgeInsets.all(20),
         child: Row(
           children: [
@@ -267,11 +314,72 @@ class _ProfileHero extends StatelessWidget {
             const SizedBox(width: 16),
             Expanded(
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(name, style: const TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w800)),
-                Text('@$username', style: const TextStyle(color: MesseyaUi.textMuted, fontSize: 15)),
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        name,
+                        style: TextStyle(
+                          color: MesseyaUi.textPrimaryFor(context),
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                    ),
+                    if (isVerified) ...[
+                      const SizedBox(width: 6),
+                      const Icon(Icons.verified_rounded, color: Colors.blueAccent, size: 20),
+                    ],
+                  ],
+                ),
+                Text('@$username', style: TextStyle(color: MesseyaUi.textMutedFor(context), fontSize: 15)),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: isVerified
+                        ? Colors.blueAccent.withValues(alpha: 0.14)
+                        : MesseyaUi.isDark(context)
+                            ? Colors.white.withValues(alpha: 0.06)
+                            : Colors.black.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(
+                      color: isVerified
+                          ? Colors.blueAccent.withValues(alpha: 0.35)
+                          : MesseyaUi.isDark(context)
+                              ? Colors.white.withValues(alpha: 0.06)
+                              : Colors.black.withValues(alpha: 0.06),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(
+                        isVerified
+                            ? Icons.verified_rounded
+                            : Icons.shield_outlined,
+                        size: 14,
+                        color: isVerified
+                            ? Colors.blueAccent
+                            : MesseyaUi.textMutedFor(context),
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        verificationLabel,
+                        style: TextStyle(
+                          color: isVerified
+                              ? Colors.blueAccent
+                              : MesseyaUi.textMutedFor(context),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ]),
             ),
-            IconButton(icon: const Icon(Icons.edit_outlined, color: Colors.white), onPressed: onEdit),
+            IconButton(icon: Icon(Icons.edit_outlined, color: MesseyaUi.textPrimaryFor(context)), onPressed: onEdit),
           ],
         ),
       ),
@@ -304,31 +412,160 @@ class _StatCard extends StatelessWidget {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(color: Colors.white.withOpacity(0.03), borderRadius: BorderRadius.circular(18), border: Border.all(color: Colors.white.withOpacity(0.05))),
+        decoration: BoxDecoration(
+          color: MesseyaUi.isDark(context)
+              ? Colors.white.withValues(alpha: 0.03)
+              : Colors.black.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: MesseyaUi.isDark(context)
+                ? Colors.white.withValues(alpha: 0.05)
+                : Colors.black.withValues(alpha: 0.05),
+          ),
+        ),
         child: Column(children: [
           Icon(icon, color: active ? MesseyaUi.accent : MesseyaUi.textMuted, size: 20),
           const SizedBox(height: 6),
-          Text(value ?? label, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+          Text(
+            value ?? label,
+            style: TextStyle(
+              color: MesseyaUi.textPrimaryFor(context),
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ]),
       ),
     );
   }
 }
 
-class _InlineThemeSelector extends StatelessWidget {
-  const _InlineThemeSelector({required this.themeMode, required this.onThemeChanged});
+class _ThemeSection extends StatelessWidget {
+  const _ThemeSection({required this.themeMode, required this.onThemeChanged});
   final ThemeMode themeMode; final ValueChanged<ThemeMode> onThemeChanged;
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<ThemeMode>(
-      style: SegmentedButton.styleFrom(backgroundColor: Colors.white.withOpacity(0.05), foregroundColor: Colors.white, selectedBackgroundColor: MesseyaUi.accent.withOpacity(0.2)),
-      segments: const [
-        ButtonSegment(value: ThemeMode.system, label: Text('Sistema'), icon: Icon(Icons.brightness_auto)),
-        ButtonSegment(value: ThemeMode.light, label: Text('Claro'), icon: Icon(Icons.light_mode)),
-        ButtonSegment(value: ThemeMode.dark, label: Text('Oscuro'), icon: Icon(Icons.dark_mode)),
+    final options = <({ThemeMode mode, String title, String subtitle, IconData icon})>[
+      (
+        mode: ThemeMode.light,
+        title: 'Blanco',
+        subtitle: 'Interfaz clara',
+        icon: Icons.light_mode_rounded,
+      ),
+      (
+        mode: ThemeMode.dark,
+        title: 'Negro',
+        subtitle: 'Interfaz oscura',
+        icon: Icons.dark_mode_rounded,
+      ),
+      (
+        mode: ThemeMode.system,
+        title: 'Sistema',
+        subtitle: 'Sigue tu equipo',
+        icon: Icons.brightness_auto_rounded,
+      ),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Tema de la app',
+          style: TextStyle(
+            color: MesseyaUi.textPrimaryFor(context),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          'Tu elección se guarda y se mantiene hasta que vuelvas a cambiarla.',
+          style: TextStyle(
+            color: MesseyaUi.textMutedFor(context),
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 10,
+          runSpacing: 10,
+          children: options
+              .map(
+                (option) => _ThemeOptionCard(
+                  title: option.title,
+                  subtitle: option.subtitle,
+                  icon: option.icon,
+                  selected: themeMode == option.mode,
+                  onTap: () => onThemeChanged(option.mode),
+                ),
+              )
+              .toList(),
+        ),
       ],
-      selected: {themeMode},
-      onSelectionChanged: (selection) => onThemeChanged(selection.first),
+    );
+  }
+}
+
+class _ThemeOptionCard extends StatelessWidget {
+  const _ThemeOptionCard({
+    required this.title,
+    required this.subtitle,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(18),
+      child: Ink(
+        width: 150,
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: selected
+              ? MesseyaUi.accent.withValues(alpha: 0.16)
+              : (MesseyaUi.isDark(context)
+                  ? Colors.white.withValues(alpha: 0.04)
+                  : Colors.black.withValues(alpha: 0.04)),
+          border: Border.all(
+            color: selected
+                ? MesseyaUi.accent
+                : (MesseyaUi.isDark(context)
+                    ? Colors.white.withValues(alpha: 0.06)
+                    : Colors.black.withValues(alpha: 0.06)),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: selected ? MesseyaUi.accent : MesseyaUi.textPrimaryFor(context)),
+            const SizedBox(height: 10),
+            Text(
+              title,
+              style: TextStyle(
+                color: MesseyaUi.textPrimaryFor(context),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              style: TextStyle(
+                color: MesseyaUi.textMutedFor(context),
+                fontSize: 12,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -341,8 +578,21 @@ class _SectionTitle extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 12),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 18)),
-        Text(subtitle, style: const TextStyle(color: MesseyaUi.textMuted, fontSize: 12)),
+        Text(
+          title,
+          style: TextStyle(
+            color: MesseyaUi.textPrimaryFor(context),
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+          ),
+        ),
+        Text(
+          subtitle,
+          style: TextStyle(
+            color: MesseyaUi.textMutedFor(context),
+            fontSize: 12,
+          ),
+        ),
       ]),
     );
   }
@@ -354,10 +604,26 @@ class _Tile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ListTile(
-      leading: CircleAvatar(backgroundColor: iconColor.withOpacity(0.1), child: Icon(icon, color: iconColor, size: 20)),
-      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: MesseyaUi.textMuted, fontSize: 12)),
-      trailing: const Icon(Icons.chevron_right, color: Colors.white24),
+      leading: CircleAvatar(backgroundColor: iconColor.withValues(alpha: 0.1), child: Icon(icon, color: iconColor, size: 20)),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: MesseyaUi.textPrimaryFor(context),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: MesseyaUi.textMutedFor(context),
+          fontSize: 12,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right,
+        color: MesseyaUi.textMutedFor(context),
+      ),
       onTap: onTap,
     );
   }
@@ -371,9 +637,22 @@ class _SwitchTile extends StatelessWidget {
     return SwitchListTile(
       value: value,
       onChanged: onChanged,
-      title: Text(title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600)),
-      subtitle: Text(subtitle, style: const TextStyle(color: MesseyaUi.textMuted, fontSize: 12)),
-      secondary: CircleAvatar(backgroundColor: iconColor.withOpacity(0.1), child: Icon(icon, color: iconColor, size: 20)),
+      title: Text(
+        title,
+        style: TextStyle(
+          color: MesseyaUi.textPrimaryFor(context),
+          fontSize: 15,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+      subtitle: Text(
+        subtitle,
+        style: TextStyle(
+          color: MesseyaUi.textMutedFor(context),
+          fontSize: 12,
+        ),
+      ),
+      secondary: CircleAvatar(backgroundColor: iconColor.withValues(alpha: 0.1), child: Icon(icon, color: iconColor, size: 20)),
     );
   }
 }

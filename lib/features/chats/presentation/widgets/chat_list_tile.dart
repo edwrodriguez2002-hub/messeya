@@ -13,12 +13,14 @@ class ChatListTile extends ConsumerWidget {
     required this.chat,
     required this.currentUserId,
     required this.onTap,
+    this.accountBadgeText,
     this.onLongPress,
   });
 
   final Chat chat;
   final String currentUserId;
   final VoidCallback onTap;
+  final String? accountBadgeText;
   final VoidCallback? onLongPress;
 
   @override
@@ -157,8 +159,30 @@ class ChatListTile extends ConsumerWidget {
                             fontSize: 14, // REDUCIDO DE 16
                             fontWeight: FontWeight.w500,
                           ),
+                          ),
                         ),
-                      ),
+                      if (accountBadgeText != null &&
+                          accountBadgeText!.trim().isNotEmpty) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.14),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            accountBadgeText!,
+                            style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
                       if (unreadCount > 0) ...[
                         const SizedBox(width: 10),
                         Container(

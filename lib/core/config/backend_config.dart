@@ -1,10 +1,12 @@
 class BackendConfig {
   const BackendConfig._();
 
-  // El backend legado para notificaciones/chat ya no se usa en la app.
-  static const String apiBaseUrl = '';
+  static const String apiBaseUrl = String.fromEnvironment(
+    'MESSEYA_COMPANY_BILLING_URL',
+    defaultValue: 'http://192.168.101.81:3020',
+  );
 
-  static bool get hasApiBaseUrl => false;
+  static bool get hasApiBaseUrl => apiBaseUrl.trim().isNotEmpty;
 
   static const String companySubscriptionProductId = String.fromEnvironment(
     'MESSEYA_COMPANY_SUBSCRIPTION_PRODUCT_ID',
@@ -17,6 +19,16 @@ class BackendConfig {
   );
 
   static Uri buildUri(String path) {
-    throw StateError('El backend legado ha sido desactivado en favor de Stream Chat.');
+    if (!hasApiBaseUrl) {
+      throw StateError(
+        'No hay backend configurado para verificar la suscripcion empresarial.',
+      );
+    }
+
+    final normalizedBase = apiBaseUrl.endsWith('/')
+        ? apiBaseUrl.substring(0, apiBaseUrl.length - 1)
+        : apiBaseUrl;
+    final normalizedPath = path.startsWith('/') ? path : '/$path';
+    return Uri.parse('$normalizedBase$normalizedPath');
   }
 }

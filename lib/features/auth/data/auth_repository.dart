@@ -1,12 +1,15 @@
 import 'dart:async';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import '../../../core/firebase/firebase_multi_session.dart';
 import '../../../core/services/app_preferences_service.dart';
 import '../../../core/firebase/firebase_providers.dart';
 import '../../profile/data/profile_repository.dart';
+import '../../../shared/models/remembered_account.dart';
 
 final googleSignInProvider = Provider<GoogleSignIn>(
   (ref) => GoogleSignIn(
@@ -25,6 +28,7 @@ final authRepositoryProvider = Provider<AuthRepository>((ref) {
     ref.watch(profileRepositoryProvider),
     ref.watch(googleSignInProvider),
     ref.watch(emailOtpSessionProvider.notifier),
+    ref,
   );
 });
 
@@ -42,12 +46,14 @@ class AuthRepository {
     this._profileRepository,
     this._googleSignIn,
     this._emailOtpSessionController,
+    this._ref,
   );
 
   final FirebaseAuth _auth;
   final ProfileRepository _profileRepository;
   final GoogleSignIn _googleSignIn;
   final EmailOtpSessionController _emailOtpSessionController;
+  final Ref _ref;
 
   User? get currentUser => _auth.currentUser;
 
@@ -82,6 +88,8 @@ class AuthRepository {
       // No llamamos a ensureUserProfile para evitar escrituras innecesarias en Firestore.
       await _emailOtpSessionController.clear();
       await _profileRepository.setOnlineStatus(isOnline: true);
+      await _rememberCurrentAccount();
+      await _ref.read(activeAccountUidProvider.notifier).setUid(_auth.currentUser?.uid ?? '');
     } on FirebaseAuthException catch (e) {
       throw Exception(_mapError(e));
     }
@@ -112,6 +120,8 @@ class AuthRepository {
         email: normalizedEmail,
       );
       await _profileRepository.setOnlineStatus(isOnline: true);
+      await _rememberCurrentAccount();
+      await _ref.read(activeAccountUidProvider.notifier).setUid(_auth.currentUser?.uid ?? '');
     } on FirebaseAuthException catch (e) {
       throw Exception(_mapError(e));
     }
@@ -153,6 +163,8 @@ class AuthRepository {
       );
       await _emailOtpSessionController.clear();
       await _profileRepository.setOnlineStatus(isOnline: true);
+      await _rememberCurrentAccount();
+      await _ref.read(activeAccountUidProvider.notifier).setUid(_auth.currentUser?.uid ?? '');
     } on FirebaseAuthException catch (e) {
       throw Exception(_mapError(e));
     } catch (e) {
@@ -229,6 +241,8 @@ class AuthRepository {
     );
     await _emailOtpSessionController.clear();
     await _profileRepository.setOnlineStatus(isOnline: true);
+    await _rememberCurrentAccount();
+    await _ref.read(activeAccountUidProvider.notifier).setUid(_auth.currentUser?.uid ?? '');
   }
 
   Future<void> signOut() async {
@@ -243,6 +257,76 @@ class AuthRepository {
     } catch (_) {
     }
     await _auth.signOut();
+  }
+
+  Future<RememberedAccount?> addGoogleSession() async {
+    try {
+      await _googleSignIn.signOut();
+      final googleUser = await _googleSignIn.signIn();
+      if (googleUser == null) return null;
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final appName = 'session_${DateTime.now().millisecondsSinceEpoch}';
+      final app = await ensureSessionFirebaseApp(appName);
+      final sessionAuth = FirebaseAuth.instanceFor(app: app);
+      final sessionFirestore = FirebaseFirestore.instanceFor(app: app);
+
+      final userCredential = await sessionAuth.signInWithCredential(credential);
+      final user = userCredential.user;
+      if (user == null) {
+        throw Exception('No se pudo autenticar la nueva sesion de Google.');
+      }
+
+      await _profileRepository.ensureUserProfileForSession(
+        firestore: sessionFirestore,
+        auth: sessionAuth,
+        uid: user.uid,
+        email: user.email ?? '',
+        desiredUsername: _preferredUsername(
+          email: user.email,
+          displayName: user.displayName,
+          fallback: 'googleuser',
+        ),
+        name: user.displayName?.trim().isNotEmpty == true
+            ? user.displayName!.trim()
+            : 'Usuario Google',
+        photoUrl: user.photoURL ?? '',
+      );
+      await _profileRepository.setOnlineStatusForSession(
+        firestore: sessionFirestore,
+        auth: sessionAuth,
+        isOnline: true,
+      );
+
+      final appUser = await _profileRepository.getUserForSession(
+        firestore: sessionFirestore,
+        auth: sessionAuth,
+      );
+      if (appUser == null) {
+        throw Exception('No se pudo cargar el perfil de la nueva sesion.');
+      }
+
+      final remembered = RememberedAccount(
+        uid: appUser.uid,
+        username: appUser.username,
+        name: appUser.name,
+        email: appUser.email,
+        photoUrl: appUser.photoUrl,
+        firebaseAppName: appName,
+        lastUsedAtMs: DateTime.now().millisecondsSinceEpoch,
+      );
+      await _ref.read(rememberedAccountsProvider.notifier).remember(remembered);
+      return remembered;
+    } on FirebaseAuthException catch (e) {
+      throw Exception(_mapError(e));
+    } catch (e) {
+      throw Exception('No se pudo agregar la sesion: $e');
+    }
   }
 
   Future<void> sendPasswordRecovery(String email) async {
@@ -320,5 +404,23 @@ class AuthRepository {
     final atIndex = trimmed.indexOf('@');
     if (atIndex <= 0) return trimmed;
     return trimmed.substring(0, atIndex);
+  }
+
+  Future<void> _rememberCurrentAccount() async {
+    final user = await _profileRepository.getCurrentUser();
+    if (user == null) return;
+    final remembered = RememberedAccount(
+      uid: user.uid,
+      username: user.username,
+      name: user.name,
+      email: user.email,
+      photoUrl: user.photoUrl,
+      firebaseAppName: _auth.app.name == '[DEFAULT]'
+          ? defaultFirebaseSessionAppName
+          : _auth.app.name,
+      lastUsedAtMs: DateTime.now().millisecondsSinceEpoch,
+    );
+    await _ref.read(rememberedAccountsProvider.notifier).remember(remembered);
+    await _ref.read(activeSessionViewProvider.notifier).setView(user.uid);
   }
 }

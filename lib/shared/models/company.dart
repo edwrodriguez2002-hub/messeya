@@ -41,6 +41,16 @@ class Company {
   final DateTime? createdAt;
   final bool isVerified;
 
+  bool isOwner(String userId) => ownerId.isNotEmpty && ownerId == userId;
+
+  bool isAdmin(String userId) => adminIds.contains(userId) || isOwner(userId);
+
+  bool isMember(String userId) => memberIds.contains(userId);
+
+  bool canManageMembers(String userId) => isAdmin(userId);
+
+  bool canCreateChannels(String userId) => isAdmin(userId);
+
   bool get isActive =>
       planStatus == 'active' || planStatus == 'trial' || planStatus == 'grace';
 

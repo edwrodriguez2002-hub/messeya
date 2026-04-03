@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../shared/models/app_user.dart';
+import '../../../shared/widgets/messeya_ui.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../chats/data/chats_repository.dart';
@@ -114,18 +115,28 @@ class _ComposePageState extends ConsumerState<ComposePage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: MesseyaUi.cardFor(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             UserAvatar(photoUrl: user.photoUrl, name: user.name, radius: 40),
             const SizedBox(height: 16),
-            Text(user.name, style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold)),
+            Text(
+              user.name,
+              style: TextStyle(
+                color: MesseyaUi.textPrimaryFor(context),
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
             Text('@${user.username}', style: const TextStyle(color: Colors.blue, fontSize: 14)),
             const SizedBox(height: 8),
-            Text(user.bio.isEmpty ? 'Sin biografía' : user.bio, 
-                textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)),
+            Text(
+              user.bio.isEmpty ? 'Sin biografía' : user.bio,
+              textAlign: TextAlign.center,
+              style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+            ),
           ],
         ),
         actions: [
@@ -220,6 +231,10 @@ class _ComposePageState extends ConsumerState<ComposePage> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = MesseyaUi.backgroundFor(context);
+    final surfaceColor = MesseyaUi.cardFor(context);
+    final primaryTextColor = MesseyaUi.textPrimaryFor(context);
+    final mutedTextColor = MesseyaUi.textMutedFor(context);
     return PopScope(
       canPop: true,
       onPopInvokedWithResult: (didPop, result) async {
@@ -228,10 +243,10 @@ class _ComposePageState extends ConsumerState<ComposePage> {
         }
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0F172A),
+        backgroundColor: backgroundColor,
         appBar: AppBar(
           title: const Text('Redactar Correo'),
-          backgroundColor: const Color(0xFF1E293B),
+          backgroundColor: surfaceColor,
           leading: IconButton(
             icon: const Icon(Icons.arrow_back),
             onPressed: () => context.pop(),
@@ -248,52 +263,58 @@ class _ComposePageState extends ConsumerState<ComposePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Para:', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold)),
+              Text(
+                'Para:',
+                style: TextStyle(color: mutedTextColor, fontWeight: FontWeight.bold),
+              ),
               const SizedBox(height: 8),
               Wrap(
                 spacing: 8,
                 children: [
                   ..._selectedUsers.map((u) => Chip(
-                    backgroundColor: Colors.blue.withOpacity(0.2),
-                    label: Text(u.name, style: const TextStyle(color: Colors.white)),
+                    backgroundColor: Colors.blue.withValues(alpha: 0.18),
+                    label: Text(u.name, style: TextStyle(color: primaryTextColor)),
                     onDeleted: () => setState(() => _selectedUsers.remove(u)),
-                    deleteIconColor: Colors.white70,
+                    deleteIconColor: mutedTextColor,
                   )),
                   ActionChip(
-                    backgroundColor: const Color(0xFF1E293B),
+                    backgroundColor: surfaceColor,
                     label: const Icon(Icons.add, color: Colors.blue, size: 20),
                     onPressed: () => _showSearchDialog(),
                   ),
                 ],
               ),
-              const Divider(color: Colors.white12, height: 32),
+              Divider(color: mutedTextColor.withValues(alpha: 0.18), height: 32),
               
               TextField(
                 controller: _subjectController,
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                decoration: const InputDecoration(
+                style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.bold),
+                decoration: InputDecoration(
                   hintText: 'Asunto',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: mutedTextColor),
                   border: InputBorder.none,
                 ),
               ),
-              const Divider(color: Colors.white12),
+              Divider(color: mutedTextColor.withValues(alpha: 0.18)),
               
               TextField(
                 controller: _messageController,
                 maxLines: null,
                 minLines: 5,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
+                style: TextStyle(color: primaryTextColor),
+                decoration: InputDecoration(
                   hintText: 'Escribe tu mensaje...',
-                  hintStyle: TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: mutedTextColor),
                   border: InputBorder.none,
                 ),
               ),
               
               if (_attachedFiles.isNotEmpty) ...[
                 const SizedBox(height: 16),
-                const Text('Adjuntos:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                Text(
+                  'Adjuntos:',
+                  style: TextStyle(color: mutedTextColor, fontSize: 12),
+                ),
                 const SizedBox(height: 8),
                 SizedBox(
                   height: 60,
@@ -303,12 +324,20 @@ class _ComposePageState extends ConsumerState<ComposePage> {
                     itemBuilder: (context, index) => Container(
                       margin: const EdgeInsets.only(right: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 12),
-                      decoration: BoxDecoration(color: Colors.white10, borderRadius: BorderRadius.circular(8)),
+                      decoration: BoxDecoration(
+                        color: MesseyaUi.isDark(context)
+                            ? Colors.white.withValues(alpha: 0.08)
+                            : Colors.black.withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
                       child: Row(
                         children: [
                           const Icon(Icons.attach_file, color: Colors.blue, size: 16),
                           const SizedBox(width: 4),
-                          Text(_attachedFiles[index].path.split('/').last, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                          Text(
+                            _attachedFiles[index].path.split('/').last,
+                            style: TextStyle(color: primaryTextColor, fontSize: 12),
+                          ),
                           IconButton(icon: const Icon(Icons.close, size: 16, color: Colors.red), onPressed: () => setState(() => _attachedFiles.removeAt(index))),
                         ],
                       ),
@@ -320,7 +349,7 @@ class _ComposePageState extends ConsumerState<ComposePage> {
           ),
         ),
         bottomNavigationBar: BottomAppBar(
-          color: const Color(0xFF1E293B),
+          color: surfaceColor,
           child: Row(
             children: [
               IconButton(icon: const Icon(Icons.photo_library_outlined, color: Colors.blue), onPressed: _pickImages),
@@ -336,7 +365,7 @@ class _ComposePageState extends ConsumerState<ComposePage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: MesseyaUi.backgroundFor(context),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Container(
           height: MediaQuery.of(context).size.height * 0.8,
@@ -346,13 +375,13 @@ class _ComposePageState extends ConsumerState<ComposePage> {
               TextField(
                 controller: _searchController,
                 autofocus: true,
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
                 decoration: InputDecoration(
                   hintText: 'Buscar usuario...',
-                  hintStyle: const TextStyle(color: Colors.white38),
+                  hintStyle: TextStyle(color: MesseyaUi.textMutedFor(context)),
                   prefixIcon: const Icon(Icons.search, color: Colors.blue),
                   filled: true,
-                  fillColor: const Color(0xFF1E293B),
+                  fillColor: MesseyaUi.cardFor(context),
                   border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
                 ),
                 onChanged: (val) async {
@@ -371,8 +400,14 @@ class _ComposePageState extends ConsumerState<ComposePage> {
                         final isSelected = _selectedUsers.any((u) => u.uid == user.uid);
                         return ListTile(
                           leading: UserAvatar(photoUrl: user.photoUrl, name: user.name),
-                          title: Text(user.name, style: const TextStyle(color: Colors.white)),
-                          subtitle: Text('@${user.username}', style: const TextStyle(color: Colors.white38)),
+                          title: Text(
+                            user.name,
+                            style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
+                          ),
+                          subtitle: Text(
+                            '@${user.username}',
+                            style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+                          ),
                           trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
                           onTap: () => _showUserInfo(user),
                         );

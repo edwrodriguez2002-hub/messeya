@@ -8,6 +8,7 @@
   "scripts": {
     "start": "node scripts/onesignal-push-dev-server.js",
     "start:onesignal-push": "node scripts/onesignal-push-dev-server.js",
+    "start:company-billing": "node scripts/company-billing-dev-server.js",
     "serve": "firebase emulators:start --only functions",
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log"
@@ -15,6 +16,7 @@
   "dependencies": {
     "firebase-admin": "^12.7.0",
     "firebase-functions": "^6.1.0",
+    "googleapis": "^150.0.1",
     "resend": "^4.6.0"
   }
 }

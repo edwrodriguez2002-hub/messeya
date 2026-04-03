@@ -149,7 +149,7 @@ class CompanyBillingService {
   }
 
   Future<CompanyBillingResult> purchaseCompanyPlan({
-    required Company company,
+    Company? company,
   }) async {
     if (!_supportsPlayBilling()) {
       throw Exception(
@@ -179,7 +179,7 @@ class CompanyBillingService {
     final completer = Completer<CompanyBillingResult>();
     _replacePendingOperation(
       _PendingBillingOperation(
-        companyId: company.id,
+        companyId: company?.id,
         completer: completer,
       ),
     );
@@ -206,7 +206,7 @@ class CompanyBillingService {
   }
 
   Future<CompanyBillingResult> restoreCompanyPlan({
-    required Company company,
+    Company? company,
   }) async {
     if (!_supportsPlayBilling()) {
       throw Exception(
@@ -222,7 +222,7 @@ class CompanyBillingService {
     final completer = Completer<CompanyBillingResult>();
     _replacePendingOperation(
       _PendingBillingOperation(
-        companyId: company.id,
+        companyId: company?.id,
         completer: completer,
       ),
     );
@@ -242,7 +242,7 @@ class CompanyBillingService {
   }
 
   Future<CompanyBillingResult> refreshCompanyPlan({
-    required Company company,
+    Company? company,
   }) async {
     final user = _auth.currentUser;
     if (user == null) {
@@ -257,7 +257,7 @@ class CompanyBillingService {
         'Authorization': 'Bearer $idToken',
       },
       body: jsonEncode({
-        'companyId': company.id,
+        if (company != null) 'companyId': company.id,
       }),
     );
 
@@ -342,7 +342,7 @@ class CompanyBillingService {
   }
 
   Future<CompanyBillingResult> _verifyPurchaseForCompany({
-    required String companyId,
+    String? companyId,
     required PurchaseDetails purchase,
   }) async {
     final user = _auth.currentUser;
@@ -363,7 +363,7 @@ class CompanyBillingService {
         'Authorization': 'Bearer $idToken',
       },
       body: jsonEncode({
-        'companyId': companyId,
+        if (companyId != null && companyId.isNotEmpty) 'companyId': companyId,
         'purchaseToken': purchaseToken,
         'productId': purchase.productID,
       }),
@@ -431,7 +431,7 @@ class _PendingBillingOperation {
     required this.completer,
   });
 
-  final String companyId;
+  final String? companyId;
   final Completer<CompanyBillingResult> completer;
 
   void complete(CompanyBillingResult result) {

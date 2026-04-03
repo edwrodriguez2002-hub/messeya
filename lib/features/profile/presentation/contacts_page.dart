@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../shared/models/app_user.dart';
+import '../../../shared/widgets/messeya_ui.dart';
 import '../../../shared/widgets/user_avatar.dart';
 import '../data/contacts_repository.dart';
 import '../data/profile_repository.dart';
@@ -12,14 +12,18 @@ class ContactsPage extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final backgroundColor = MesseyaUi.backgroundFor(context);
+    final surfaceColor = MesseyaUi.cardFor(context);
+    final primaryTextColor = MesseyaUi.textPrimaryFor(context);
+    final mutedTextColor = MesseyaUi.textMutedFor(context);
     final contactUidsAsync = ref.watch(myContactUidsProvider);
     final requestUidsAsync = ref.watch(incomingRequestUidsProvider);
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
         title: const Text('Contactos'),
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: surfaceColor,
         elevation: 0,
       ),
       body: CustomScrollView(
@@ -40,22 +44,27 @@ class ContactsPage extends ConsumerWidget {
                       ),
                     ),
                     ...uids.map((uid) => _UserRequestTile(uid: uid)),
-                    const Divider(color: Colors.white10, height: 32),
+                    Divider(color: mutedTextColor.withValues(alpha: 0.18), height: 32),
                   ],
                 ),
               );
             },
             loading: () => const SliverToBoxAdapter(child: LinearProgressIndicator()),
-            error: (err, _) => SliverToBoxAdapter(child: Text('Error: $err', style: const TextStyle(color: Colors.white24))),
+            error: (err, _) => SliverToBoxAdapter(
+              child: Text(
+                'Error: $err',
+                style: TextStyle(color: mutedTextColor),
+              ),
+            ),
           ),
 
           // 2. TÍTULO DE MIS CONTACTOS
-          const SliverToBoxAdapter(
+          SliverToBoxAdapter(
             child: Padding(
               padding: EdgeInsets.fromLTRB(16, 8, 16, 8),
               child: Text(
                 'MIS CONTACTOS',
-                style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12),
+                style: TextStyle(color: mutedTextColor, fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
           ),
@@ -67,7 +76,7 @@ class ContactsPage extends ConsumerWidget {
                 return const SliverFillRemaining(
                   hasScrollBody: false,
                   child: Center(
-                    child: Text('Aún no tienes contactos.', style: TextStyle(color: Colors.white38)),
+                    child: Text('Aún no tienes contactos.'),
                   ),
                 );
               }
@@ -79,7 +88,14 @@ class ContactsPage extends ConsumerWidget {
               );
             },
             loading: () => const SliverFillRemaining(child: Center(child: CircularProgressIndicator())),
-            error: (err, _) => SliverToBoxAdapter(child: Center(child: Text('Error: $err'))),
+            error: (err, _) => SliverToBoxAdapter(
+              child: Center(
+                child: Text(
+                  'Error: $err',
+                  style: TextStyle(color: primaryTextColor),
+                ),
+              ),
+            ),
           ),
         ],
       ),
@@ -94,10 +110,15 @@ class _UserContactTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(userProfileProvider(uid));
+    final contactEntryAsync = ref.watch(contactEntryProvider(uid));
     
     return userAsync.when(
       data: (user) {
         if (user == null) return const SizedBox.shrink();
+        final contactEntry = contactEntryAsync.valueOrNull ?? const <String, dynamic>{};
+        final displayName =
+            ((contactEntry['displayName'] as String?) ?? '').trim();
+        final effectiveName = displayName.isNotEmpty ? displayName : user.name;
         return ListTile(
           leading: UserAvatar(photoUrl: user.photoUrl, name: user.name),
           title: Row(
@@ -105,8 +126,8 @@ class _UserContactTile extends ConsumerWidget {
             children: [
               Flexible(
                 child: Text(
-                  user.name,
-                  style: const TextStyle(color: Colors.white),
+                  effectiveName,
+                  style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -120,11 +141,19 @@ class _UserContactTile extends ConsumerWidget {
               ],
             ],
           ),
-          subtitle: Text('@${user.username}', style: const TextStyle(color: Colors.white38)),
+          subtitle: Text(
+            '@${user.username}',
+            style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+          ),
           onTap: () => context.push('/contact/${user.uid}'),
         );
       },
-      loading: () => const ListTile(title: Text('Cargando...', style: TextStyle(color: Colors.white24))),
+      loading: () => ListTile(
+        title: Text(
+          'Cargando...',
+          style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+        ),
+      ),
       error: (_, __) => const SizedBox.shrink(),
     );
   }
@@ -137,10 +166,15 @@ class _UserRequestTile extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final userAsync = ref.watch(userProfileProvider(uid));
+    final contactEntryAsync = ref.watch(contactEntryProvider(uid));
 
     return userAsync.when(
       data: (user) {
         if (user == null) return const SizedBox.shrink();
+        final contactEntry = contactEntryAsync.valueOrNull ?? const <String, dynamic>{};
+        final displayName =
+            ((contactEntry['displayName'] as String?) ?? '').trim();
+        final effectiveName = displayName.isNotEmpty ? displayName : user.name;
         return ListTile(
           leading: UserAvatar(photoUrl: user.photoUrl, name: user.name),
           title: Row(
@@ -148,8 +182,8 @@ class _UserRequestTile extends ConsumerWidget {
             children: [
               Flexible(
                 child: Text(
-                  user.name,
-                  style: const TextStyle(color: Colors.white),
+                  effectiveName,
+                  style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),

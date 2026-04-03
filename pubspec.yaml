@@ -2,7 +2,7 @@ name: messeya
 description: Una aplicación de chat segura y resiliente con soporte para redes mesh locales.
 publish_to: "none"
 
-version: 1.7.6+19
+version: 1.7.8+21
 
 environment:
   sdk: ">=3.4.0 <4.0.0"

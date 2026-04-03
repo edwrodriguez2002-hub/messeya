@@ -35,6 +35,9 @@ class Chat {
     this.scope = 'personal',
     this.companyId = '',
     this.companyName = '',
+    this.companyVisibility = '',
+    this.companyChannelKind = '',
+    this.isDefaultCompanyChannel = false,
   });
 
   final String id;
@@ -70,11 +73,13 @@ class Chat {
   final String scope;
   final String companyId;
   final String companyName;
+  final String companyVisibility;
+  final String companyChannelKind;
+  final bool isDefaultCompanyChannel;
 
-  factory Chat.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
-    final map = doc.data() ?? <String, dynamic>{};
+  factory Chat.fromMap(String id, Map<String, dynamic> map) {
     return Chat(
-      id: doc.id,
+      id: id,
       members: List<String>.from(map['members'] as List? ?? const []),
       memberNames: Map<String, String>.from(
         map['memberNames'] as Map? ?? const <String, String>{},
@@ -125,7 +130,15 @@ class Chat {
       scope: map['scope'] as String? ?? 'personal',
       companyId: map['companyId'] as String? ?? '',
       companyName: map['companyName'] as String? ?? '',
+      companyVisibility: map['companyVisibility'] as String? ?? '',
+      companyChannelKind: map['companyChannelKind'] as String? ?? '',
+      isDefaultCompanyChannel: map['isDefaultCompanyChannel'] as bool? ?? false,
     );
+  }
+
+  factory Chat.fromDoc(DocumentSnapshot<Map<String, dynamic>> doc) {
+    final map = doc.data() ?? <String, dynamic>{};
+    return Chat.fromMap(doc.id, map);
   }
 
   Map<String, dynamic> toMap() {
@@ -163,6 +176,9 @@ class Chat {
       'scope': scope,
       'companyId': companyId,
       'companyName': companyName,
+      'companyVisibility': companyVisibility,
+      'companyChannelKind': companyChannelKind,
+      'isDefaultCompanyChannel': isDefaultCompanyChannel,
     };
   }
 

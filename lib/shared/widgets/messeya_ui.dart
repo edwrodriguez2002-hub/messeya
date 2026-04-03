@@ -13,6 +13,28 @@ class MesseyaUi {
   static const success = Color(0xFF4DD890);
   static const danger = Color(0xFFFF6D8F);
   static const textMuted = Color(0xFF8D96B5);
+
+  static bool isDark(BuildContext context) =>
+      Theme.of(context).brightness == Brightness.dark;
+
+  static Color backgroundFor(BuildContext context) =>
+      isDark(context) ? background : const Color(0xFFF5F7FB);
+
+  static Color backgroundTopFor(BuildContext context) =>
+      isDark(context) ? backgroundTop : const Color(0xFFFFFFFF);
+
+  static Color cardFor(BuildContext context) =>
+      isDark(context) ? card : const Color(0xF2FFFFFF);
+
+  static Color cardOutlineFor(BuildContext context) => isDark(context)
+      ? cardOutline
+      : const Color(0x14081A33);
+
+  static Color textPrimaryFor(BuildContext context) =>
+      isDark(context) ? Colors.white : const Color(0xFF10203A);
+
+  static Color textMutedFor(BuildContext context) =>
+      isDark(context) ? textMuted : const Color(0xFF66758F);
 }
 
 class MesseyaBackground extends StatelessWidget {
@@ -26,13 +48,13 @@ class MesseyaBackground extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
+      decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topCenter,
           end: Alignment.bottomCenter,
           colors: [
-            MesseyaUi.backgroundTop,
-            MesseyaUi.background,
+            MesseyaUi.backgroundTopFor(context),
+            MesseyaUi.backgroundFor(context),
           ],
         ),
       ),
@@ -44,7 +66,9 @@ class MesseyaBackground extends StatelessWidget {
             right: -80,
             child: _GlowOrb(
               size: 260,
-              color: MesseyaUi.accent.withValues(alpha: 0.08),
+              color: MesseyaUi.accent.withValues(
+                alpha: MesseyaUi.isDark(context) ? 0.08 : 0.12,
+              ),
             ),
           ),
           Positioned(
@@ -52,7 +76,9 @@ class MesseyaBackground extends StatelessWidget {
             left: -90,
             child: _GlowOrb(
               size: 220,
-              color: const Color(0xFF8F5FFF).withValues(alpha: 0.05),
+              color: const Color(0xFF8F5FFF).withValues(
+                alpha: MesseyaUi.isDark(context) ? 0.05 : 0.03,
+              ),
             ),
           ),
           Positioned.fill(
@@ -86,12 +112,14 @@ class MesseyaPanel extends StatelessWidget {
     return Container(
       margin: margin,
       decoration: BoxDecoration(
-        color: MesseyaUi.card,
+        color: MesseyaUi.cardFor(context),
         borderRadius: BorderRadius.circular(borderRadius),
-        border: Border.all(color: MesseyaUi.cardOutline),
-        boxShadow: const [
+        border: Border.all(color: MesseyaUi.cardOutlineFor(context)),
+        boxShadow: [
           BoxShadow(
-            color: Color(0x44000000),
+            color: MesseyaUi.isDark(context)
+                ? const Color(0x44000000)
+                : const Color(0x12081A33),
             blurRadius: 24, // REDUCIDO DE 32
             offset: Offset(0, 12), // REDUCIDO DE 20
           ),
@@ -135,7 +163,7 @@ class MesseyaTopBar extends StatelessWidget {
               Text(
                 title,
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith( // CAMBIADO DE headlineLarge
-                      color: Colors.white,
+                      color: MesseyaUi.textPrimaryFor(context),
                       fontWeight: FontWeight.w800,
                       height: 1,
                     ),
@@ -177,11 +205,21 @@ class MesseyaRoundIconButton extends StatelessWidget {
         width: 48, // REDUCIDO DE 58
         height: 48, // REDUCIDO DE 58
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.05),
+          color: MesseyaUi.isDark(context)
+              ? Colors.white.withValues(alpha: 0.05)
+              : Colors.black.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.04)),
+          border: Border.all(
+            color: MesseyaUi.isDark(context)
+                ? Colors.white.withValues(alpha: 0.04)
+                : Colors.black.withValues(alpha: 0.05),
+          ),
         ),
-        child: Icon(icon, color: Colors.white, size: 24), // REDUCIDO DE 28
+        child: Icon(
+          icon,
+          color: MesseyaUi.textPrimaryFor(context),
+          size: 24,
+        ), // REDUCIDO DE 28
       ),
     );
 
@@ -216,17 +254,25 @@ class MesseyaSearchField extends StatelessWidget {
     return TextField(
       controller: controller,
       onChanged: onChanged,
-      style: const TextStyle(color: Colors.white, fontSize: 16), // REDUCIDO DE 18
+      style: TextStyle(
+        color: MesseyaUi.textPrimaryFor(context),
+        fontSize: 16,
+      ), // REDUCIDO DE 18
       decoration: InputDecoration(
         hintText: hintText,
-        hintStyle: const TextStyle(
-          color: MesseyaUi.textMuted,
+        hintStyle: TextStyle(
+          color: MesseyaUi.textMutedFor(context),
           fontSize: 16, // REDUCIDO DE 18
         ),
-        prefixIcon:
-            const Icon(Icons.search_rounded, color: MesseyaUi.textMuted, size: 22), // AÑADIDO SIZE
+        prefixIcon: Icon(
+          Icons.search_rounded,
+          color: MesseyaUi.textMutedFor(context),
+          size: 22,
+        ), // AÑADIDO SIZE
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.04),
+        fillColor: MesseyaUi.isDark(context)
+            ? Colors.white.withValues(alpha: 0.04)
+            : Colors.black.withValues(alpha: 0.03),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12), // AJUSTADO
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(22), // REDUCIDO DE 26
@@ -259,7 +305,7 @@ class MesseyaSectionLabel extends StatelessWidget {
           child: Text(
             label,
             style: Theme.of(context).textTheme.titleMedium?.copyWith( // CAMBIADO DE titleLarge
-                  color: MesseyaUi.textMuted,
+                  color: MesseyaUi.textMutedFor(context),
                   fontWeight: FontWeight.w600,
                 ),
           ),
@@ -298,7 +344,11 @@ class MesseyaPillButton extends StatelessWidget {
                   colors: [Color(0xFF65BEFF), Color(0xFF2D7EEB)],
                 )
               : null,
-          color: filled ? null : Colors.white.withValues(alpha: 0.08),
+          color: filled
+              ? null
+              : (MesseyaUi.isDark(context)
+                  ? Colors.white.withValues(alpha: 0.08)
+                  : Colors.black.withValues(alpha: 0.05)),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -309,8 +359,10 @@ class MesseyaPillButton extends StatelessWidget {
             ],
             Text(
               label,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: filled
+                    ? Colors.white
+                    : MesseyaUi.textPrimaryFor(context),
                 fontWeight: FontWeight.w700,
                 fontSize: 13, // AÑADIDO
               ),

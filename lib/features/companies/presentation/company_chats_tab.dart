@@ -25,6 +25,7 @@ class CompanyChatsTab extends ConsumerStatefulWidget {
 class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
   String _selectedCompanyId = '';
   String _query = '';
+  String _activeSection = 'channels';
 
   @override
   Widget build(BuildContext context) {
@@ -87,7 +88,7 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                   Padding(
                     padding: const EdgeInsets.fromLTRB(20, 18, 20, 16),
                     child: MesseyaTopBar(
-                      title: 'Empresa',
+                      title: 'Centro privado',
                       subtitle: Text(
                         '${selectedCompany.name} · ${selectedCompany.planName.toUpperCase()}',
                         style: const TextStyle(
@@ -136,6 +137,7 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                             setState(() {
                               _selectedCompanyId = company.id;
                               _query = '';
+                              _activeSection = 'channels';
                             });
                           },
                         );
@@ -159,6 +161,17 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                       ),
                     ),
                   ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+                    child: _CompanySectionSwitcher(
+                      activeSection: _activeSection,
+                      onChanged: (value) {
+                        setState(() {
+                          _activeSection = value;
+                        });
+                      },
+                    ),
+                  ),
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.fromLTRB(20, 14, 20, 100),
@@ -170,69 +183,68 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                               .toList();
                           final channelChats = companyConversations
                               .where((chat) => chat.type != 'direct')
-                              .toList();
+                              .toList()
+                            ..sort(_sortCompanyChannels);
                           final directChats = companyConversations
                               .where((chat) => chat.type == 'direct')
                               .toList();
+                          final filteredMembers =
+                              (ref
+                                          .watch(
+                                            companyMemberContactsProvider(
+                                              selectedCompany.id,
+                                            ),
+                                          )
+                                          .valueOrNull ??
+                                      const <CompanyMemberContact>[])
+                                  .where((member) => _matchesContact(member, _query))
+                                  .toList();
 
                           return ListView(
                             children: [
-                              _SectionHeader(
-                                title: 'Contactos de empresa',
-                                trailing: OutlinedButton.icon(
-                                  onPressed: () => _showContactsSheet(
-                                      context, selectedCompany),
-                                  icon:
-                                      const Icon(Icons.people_outline_rounded),
-                                  label: const Text('Ver contactos'),
-                                ),
-                              ),
-                              const SizedBox(height: 24),
-                              _SectionHeader(
-                                title: 'Conversaciones empresariales',
-                                trailing: unreadCount > 0
-                                    ? Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 10,
-                                          vertical: 6,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: MesseyaUi.accent,
-                                          borderRadius:
-                                              BorderRadius.circular(999),
-                                        ),
-                                        child: Text(
-                                          unreadCount > 99
-                                              ? '99+'
-                                              : '$unreadCount',
-                                          style: const TextStyle(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w800,
+                              if (_activeSection == 'channels') ...[
+                                _SectionHeader(
+                                  title: 'Canales internos',
+                                  trailing: unreadCount > 0
+                                      ? Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
                                           ),
-                                        ),
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(height: 10),
-                              if (companyConversations.isEmpty)
-                                _EmptySectionCard(
-                                  icon: Icons.forum_outlined,
-                                  title: _query.isEmpty
-                                      ? 'Aun no hay conversaciones empresariales'
-                                      : 'No encontramos conversaciones',
-                                  message: _query.isEmpty
-                                      ? 'Usa redactar para escribir a un miembro agregado o crea un canal desde el panel de empresa.'
-                                      : 'Prueba con otra palabra clave.',
-                                )
-                              else ...[
-                                if (directChats.isNotEmpty) ...[
-                                  const _SubsectionLabel('Mensajes directos'),
-                                  const SizedBox(height: 10),
-                                  ...directChats.map(
+                                          decoration: BoxDecoration(
+                                            color: MesseyaUi.accent,
+                                            borderRadius:
+                                                BorderRadius.circular(999),
+                                          ),
+                                          child: Text(
+                                            unreadCount > 99
+                                                ? '99+'
+                                                : '$unreadCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                                const SizedBox(height: 10),
+                                if (channelChats.isEmpty)
+                                  _EmptySectionCard(
+                                    icon: Icons.campaign_outlined,
+                                    title: _query.isEmpty
+                                        ? 'Aun no hay canales internos'
+                                        : 'No encontramos canales',
+                                    message: _query.isEmpty
+                                        ? 'El canal General ya viene incluido. Los administradores pueden crear mas canales desde el panel del centro privado.'
+                                        : 'Prueba con otra palabra clave.',
+                                  )
+                                else
+                                  ...channelChats.map(
                                     (chat) => Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 14),
-                                      child: ChatListTile(
+                                      child: _CompanyChannelTile(
                                         chat: chat,
                                         currentUserId: currentUserId,
                                         onTap: () => _openChat(
@@ -243,12 +255,51 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                                       ),
                                     ),
                                   ),
-                                ],
-                                if (channelChats.isNotEmpty) ...[
-                                  const SizedBox(height: 8),
-                                  const _SubsectionLabel('Canales internos'),
+                              ] else ...[
+                                _SectionHeader(
+                                  title: 'Integrantes del centro',
+                                  trailing: OutlinedButton.icon(
+                                    onPressed: () => _showContactsSheet(
+                                        context, selectedCompany),
+                                    icon:
+                                        const Icon(Icons.people_outline_rounded),
+                                    label: const Text('Ver todos'),
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                if (filteredMembers.isEmpty)
+                                  _EmptySectionCard(
+                                    icon: Icons.people_outline_rounded,
+                                    title: _query.isEmpty
+                                        ? 'Aun no hay integrantes visibles'
+                                        : 'No encontramos integrantes',
+                                    message: _query.isEmpty
+                                        ? 'Agrega integrantes desde el panel del centro privado para empezar a comunicarte con ellos.'
+                                        : 'Prueba con otro nombre o usuario.',
+                                  )
+                                else
+                                  ...filteredMembers.map(
+                                    (member) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 14),
+                                      child: _CompanyContactTile(
+                                        contact: member,
+                                        onTap: () async {
+                                          await _openCompanyDirectChat(
+                                            company: selectedCompany,
+                                            otherUser: member.user,
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ),
+                                if (directChats.isNotEmpty) ...[
+                                  const SizedBox(height: 18),
+                                  const _SubsectionLabel(
+                                    'Mensajes directos recientes',
+                                  ),
                                   const SizedBox(height: 10),
-                                  ...channelChats.map(
+                                  ...directChats.map(
                                     (chat) => Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 14),
@@ -278,6 +329,32 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
         ),
       ),
     );
+  }
+
+  int _sortCompanyChannels(Chat a, Chat b) {
+    final rankA = _channelRank(a);
+    final rankB = _channelRank(b);
+    if (rankA != rankB) return rankA.compareTo(rankB);
+    final aTime = a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    final bTime = b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+    return bTime.compareTo(aTime);
+  }
+
+  int _channelRank(Chat chat) {
+    switch (chat.companyChannelKind) {
+      case 'general':
+        return 0;
+      case 'announcements':
+        return 1;
+      case 'teams':
+        return 2;
+      case 'project':
+        return 3;
+      case 'support':
+        return 4;
+      default:
+        return 5;
+    }
   }
 
   bool _matchesContact(CompanyMemberContact contact, String query) {
@@ -363,7 +440,7 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                   ),
                   title: const Text('Crear canal empresarial'),
                   subtitle: const Text(
-                    'Configura un canal interno para todo el equipo.',
+                    'Configura un canal interno para tu equipo privado.',
                   ),
                   onTap: () => Navigator.of(context).pop('channel'),
                 ),
@@ -495,7 +572,7 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Contactos agregados',
+                            'Integrantes agregados',
                             style: Theme.of(context)
                                 .textTheme
                                 .titleLarge
@@ -574,6 +651,82 @@ class _CompanyChatsTabState extends ConsumerState<CompanyChatsTab> {
 
     context.push(
       '/chat/${chat.id}?uid=${Uri.encodeComponent(otherId)}&name=${Uri.encodeComponent(name)}&username=${Uri.encodeComponent(username)}&photo=${Uri.encodeComponent(photo)}${chat.companyId.isEmpty ? '' : '&companyId=${Uri.encodeComponent(chat.companyId)}'}',
+    );
+  }
+}
+
+class _CompanySectionSwitcher extends StatelessWidget {
+  const _CompanySectionSwitcher({
+    required this.activeSection,
+    required this.onChanged,
+  });
+
+  final String activeSection;
+  final ValueChanged<String> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _SectionChipButton(
+            label: 'Canales',
+            selected: activeSection == 'channels',
+            onTap: () => onChanged('channels'),
+          ),
+        ),
+        const SizedBox(width: 10),
+        Expanded(
+          child: _SectionChipButton(
+            label: 'Integrantes',
+            selected: activeSection == 'members',
+            onTap: () => onChanged('members'),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _SectionChipButton extends StatelessWidget {
+  const _SectionChipButton({
+    required this.label,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(16),
+      child: Ink(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: selected
+              ? MesseyaUi.accent.withValues(alpha: 0.18)
+              : Colors.white.withValues(alpha: 0.04),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: selected
+                ? MesseyaUi.accent
+                : Colors.white.withValues(alpha: 0.06),
+          ),
+        ),
+        child: Center(
+          child: Text(
+            label,
+            style: TextStyle(
+              color: selected ? MesseyaUi.accent : Colors.white,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -758,6 +911,184 @@ class _CompanyContactTile extends StatelessWidget {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+}
+
+class _CompanyChannelTile extends StatelessWidget {
+  const _CompanyChannelTile({
+    required this.chat,
+    required this.currentUserId,
+    required this.onTap,
+  });
+
+  final Chat chat;
+  final String currentUserId;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _channelMeta(chat);
+    final unreadCount = chat.unreadCounts[currentUserId] ?? 0;
+    final lastPreview =
+        chat.lastMessage.trim().isEmpty ? chat.description : chat.lastMessage;
+
+    return Material(
+      color: Colors.white.withValues(alpha: 0.04),
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(22),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            children: [
+              CircleAvatar(
+                radius: 24,
+                backgroundColor: meta.color.withValues(alpha: 0.16),
+                child: Icon(meta.icon, color: meta.color),
+              ),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            chat.title.isEmpty ? 'Canal interno' : chat.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w800,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        if (chat.isDefaultCompanyChannel) ...[
+                          const SizedBox(width: 8),
+                          _ChannelPill(
+                            label: 'Base',
+                            color: Colors.blueAccent,
+                          ),
+                        ],
+                        if (chat.onlyAdminsCanPost) ...[
+                          const SizedBox(width: 8),
+                          _ChannelPill(
+                            label: 'Solo admins',
+                            color: Colors.orangeAccent,
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      lastPreview,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: MesseyaUi.textMuted,
+                        fontSize: 13,
+                        height: 1.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 12),
+              if (unreadCount > 0)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: MesseyaUi.accent,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    unreadCount > 99 ? '99+' : '$unreadCount',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                      fontSize: 11,
+                    ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: MesseyaUi.textMuted,
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  ({IconData icon, Color color}) _channelMeta(Chat chat) {
+    switch (chat.companyChannelKind) {
+      case 'general':
+        return (
+          icon: Icons.forum_rounded,
+          color: Colors.blueAccent,
+        );
+      case 'announcements':
+        return (
+          icon: Icons.campaign_rounded,
+          color: Colors.orangeAccent,
+        );
+      case 'teams':
+        return (
+          icon: Icons.groups_rounded,
+          color: Colors.greenAccent,
+        );
+      case 'project':
+        return (
+          icon: Icons.folder_special_rounded,
+          color: Colors.purpleAccent,
+        );
+      case 'support':
+        return (
+          icon: Icons.support_agent_rounded,
+          color: Colors.cyanAccent,
+        );
+      default:
+        return (
+          icon: Icons.tag_rounded,
+          color: MesseyaUi.accent,
+        );
+    }
+  }
+}
+
+class _ChannelPill extends StatelessWidget {
+  const _ChannelPill({
+    required this.label,
+    required this.color,
+  });
+
+  final String label;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: color,
+          fontWeight: FontWeight.w700,
+          fontSize: 11,
         ),
       ),
     );

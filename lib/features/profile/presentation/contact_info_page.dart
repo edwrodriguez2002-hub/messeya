@@ -25,6 +25,7 @@ class ContactInfoPage extends ConsumerWidget {
     final profile = ref.watch(userProfileProvider(userId));
     final isBlocked = ref.watch(isBlockedProvider(userId));
     final isContactAsync = ref.watch(isContactProvider(userId));
+    final contactEntryAsync = ref.watch(contactEntryProvider(userId));
     
     final companyProfile = companyId.isEmpty
         ? null
@@ -44,6 +45,14 @@ class ContactInfoPage extends ConsumerWidget {
               child: Text('No se encontro la informacion del contacto.'),
             );
           }
+
+          final contactEntry = contactEntryAsync.valueOrNull ?? const <String, dynamic>{};
+          final contactDisplayName = (contactEntry['displayName'] as String? ?? '').trim();
+          final contactStatusNote = (contactEntry['statusNote'] as String? ?? '').trim();
+          final effectiveDisplayName =
+              contactDisplayName.isNotEmpty ? contactDisplayName : user.name;
+          final effectiveStatus =
+              contactStatusNote.isNotEmpty ? contactStatusNote : (user.bio.isEmpty ? 'Disponible' : user.bio);
 
           return ListView(
             padding: const EdgeInsets.all(20),
@@ -65,7 +74,7 @@ class ContactInfoPage extends ConsumerWidget {
                         children: [
                           Flexible(
                             child: Text(
-                              user.name,
+                              effectiveDisplayName,
                               style: Theme.of(context)
                                   .textTheme
                                   .headlineSmall
@@ -94,7 +103,7 @@ class ContactInfoPage extends ConsumerWidget {
                       ),
                       const SizedBox(height: 8),
                       Text(
-                        user.bio.isEmpty ? 'Disponible' : user.bio,
+                        effectiveStatus,
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
@@ -103,9 +112,27 @@ class ContactInfoPage extends ConsumerWidget {
                       isContactAsync.when(
                         data: (isContact) {
                           if (isContact) {
-                            return const Chip(
-                              label: Text('En tus contactos'),
-                              avatar: Icon(Icons.check, size: 16, color: Colors.green),
+                            return Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              alignment: WrapAlignment.center,
+                              children: [
+                                const Chip(
+                                  label: Text('En tus contactos'),
+                                  avatar: Icon(Icons.check, size: 16, color: Colors.green),
+                                ),
+                                OutlinedButton.icon(
+                                  onPressed: () => _editContact(
+                                    context,
+                                    ref,
+                                    user,
+                                    initialDisplayName: contactDisplayName,
+                                    initialStatus: contactStatusNote,
+                                  ),
+                                  icon: const Icon(Icons.edit_outlined),
+                                  label: const Text('Editar contacto'),
+                                ),
+                              ],
                             );
                           }
                           return FilledButton.icon(
@@ -216,6 +243,70 @@ class ContactInfoPage extends ConsumerWidget {
         content: Text('${user.name} fue desbloqueado.'),
       ),
     );
+  }
+
+  Future<void> _editContact(
+    BuildContext context,
+    WidgetRef ref,
+    AppUser user, {
+    required String initialDisplayName,
+    required String initialStatus,
+  }) async {
+    final nameController = TextEditingController(text: initialDisplayName);
+    final statusController = TextEditingController(text: initialStatus);
+
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Editar contacto'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: nameController,
+              decoration: const InputDecoration(
+                labelText: 'Nombre personalizado',
+                hintText: 'Ej. Andrey trabajo',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: statusController,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Estado del contacto',
+                hintText: 'Ej. Cliente importante o Disponible',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancelar'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Guardar'),
+          ),
+        ],
+      ),
+    );
+
+    if (saved == true) {
+      await ref.read(contactsRepositoryProvider).updateContactDetails(
+            otherUid: user.uid,
+            displayName: nameController.text,
+            statusNote: statusController.text,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Contacto actualizado correctamente.')),
+      );
+    }
+
+    nameController.dispose();
+    statusController.dispose();
   }
 }
 

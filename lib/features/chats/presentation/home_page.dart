@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../core/services/app_preferences_service.dart';
+import '../../../shared/models/remembered_account.dart';
 import '../../../shared/widgets/messeya_ui.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../companies/data/companies_repository.dart';
@@ -26,6 +28,8 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   Widget build(BuildContext context) {
     final effectiveUserId = ref.watch(effectiveMessagingUserIdProvider);
+    final activeSessionView = ref.watch(activeSessionViewProvider);
+    final rememberedAccounts = ref.watch(rememberedAccountsProvider);
     final chats =
         ref.watch(userChatsForProvider(effectiveUserId)).valueOrNull ??
             const [];
@@ -104,8 +108,14 @@ class _HomePageState extends ConsumerState<HomePage> {
           ? Padding(
               padding: const EdgeInsets.only(bottom: 0.1), // BAJADO PARA QUE SE VEA MEJOR EN CHATS
               child: FloatingActionButton.extended(
-                onPressed:
-                    isDesktopLinked ? null : () => context.push('/compose'),
+                onPressed: isDesktopLinked
+                    ? null
+                    : () => _handleComposePressed(
+                          context,
+                          activeSessionView: activeSessionView,
+                          currentUserId: effectiveUserId,
+                          rememberedAccounts: rememberedAccounts,
+                        ),
                 backgroundColor: Colors.blue,
                 foregroundColor: Colors.white,
                 elevation: 6,
@@ -139,6 +149,130 @@ class _HomePageState extends ConsumerState<HomePage> {
                 ),
               );
             }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _handleComposePressed(
+    BuildContext context, {
+    required String activeSessionView,
+    required String currentUserId,
+    required List<RememberedAccount> rememberedAccounts,
+  }) async {
+    if (activeSessionView != 'all') {
+      context.push('/compose');
+      return;
+    }
+
+    final selectedUid = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return _ComposeAccountPicker(
+          rememberedAccounts: rememberedAccounts,
+          currentUserId: currentUserId,
+        );
+      },
+    );
+
+    if (!mounted || selectedUid == null) return;
+
+    if (selectedUid != currentUserId) {
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Por ahora solo puedes redactar desde la sesion activa. Entra a esa cuenta primero para enviar desde ella.',
+          ),
+        ),
+      );
+      return;
+    }
+
+    await ref.read(activeSessionViewProvider.notifier).setView(selectedUid);
+    if (!mounted) return;
+    this.context.push('/compose');
+  }
+}
+
+class _ComposeAccountPicker extends StatelessWidget {
+  const _ComposeAccountPicker({
+    required this.rememberedAccounts,
+    required this.currentUserId,
+  });
+
+  final List<RememberedAccount> rememberedAccounts;
+  final String currentUserId;
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        child: MesseyaPanel(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Elegir sesion para redactar',
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w800,
+                    ),
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Desde "Todas" puedes elegir la cuenta emisora. Por ahora solo se puede enviar con la sesion que esta realmente activa.',
+                style: TextStyle(
+                  color: MesseyaUi.textMuted,
+                  fontSize: 13,
+                ),
+              ),
+              const SizedBox(height: 14),
+              ...rememberedAccounts.map(
+                (account) => ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  leading: CircleAvatar(
+                    backgroundColor: Colors.blue.withValues(alpha: 0.18),
+                    child: Text(
+                      (account.name.isNotEmpty
+                              ? account.name.characters.first
+                              : account.username.isNotEmpty
+                                  ? account.username.characters.first
+                                  : '@')
+                          .toUpperCase(),
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  title: Text(
+                    account.name,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  subtitle: Text(
+                    '@${account.username}',
+                    style: const TextStyle(color: MesseyaUi.textMuted),
+                  ),
+                  trailing: account.uid == currentUserId
+                      ? const Icon(
+                          Icons.check_circle_rounded,
+                          color: Colors.greenAccent,
+                        )
+                      : const Icon(
+                          Icons.lock_outline_rounded,
+                          color: MesseyaUi.textMuted,
+                        ),
+                  onTap: () => Navigator.of(context).pop(account.uid),
+                ),
+              ),
+            ],
           ),
         ),
       ),

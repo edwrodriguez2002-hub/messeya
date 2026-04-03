@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 import 'dart:math';
 
@@ -20,6 +21,7 @@ final chatsRepositoryProvider = Provider<ChatsRepository>((ref) {
     ref.watch(cloudinaryMediaServiceProvider),
     ref.watch(appPreferencesServiceProvider),
     ref.watch(streamChatServiceProvider),
+    ref,
   );
 });
 
@@ -52,6 +54,7 @@ class ChatsRepository {
     this._cloudinary,
     this._preferences,
     this._streamChatService,
+    this._ref,
   );
 
   final FirebaseFirestore _firestore;
@@ -59,6 +62,7 @@ class ChatsRepository {
   final CloudinaryMediaService _cloudinary;
   final AppPreferencesService _preferences;
   final StreamChatService _streamChatService;
+  final Ref _ref;
 
   CollectionReference<Map<String, dynamic>> get _chats =>
       _firestore.collection('chats');
@@ -97,6 +101,7 @@ class ChatsRepository {
         final bTime = b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
         return bTime.compareTo(aTime);
       });
+      _cacheChatsSnapshot(userId, items);
       return items;
     });
   }
@@ -892,14 +897,21 @@ class ChatsRepository {
               if (aPinned != bPinned) return aPinned ? -1 : 1;
               final aTime =
                   a.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-              final bTime =
-                  b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
+            final bTime =
+                b.lastMessageAt ?? DateTime.fromMillisecondsSinceEpoch(0);
               return bTime.compareTo(aTime);
             });
-
+            _cacheChatsSnapshot(userId, chats);
             return chats;
           });
     });
+  }
+
+  void _cacheChatsSnapshot(String userId, List<Chat> chats) {
+    if (_auth.currentUser?.uid != userId) return;
+    unawaited(
+      _ref.read(cachedChatsProvider.notifier).setChatsForUser(userId, chats),
+    );
   }
 
   Stream<Chat?> _watchStreamChat(String chatId, String userId) {

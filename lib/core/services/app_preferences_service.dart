@@ -1,10 +1,14 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
 
 import '../config/release_features.dart';
+import '../../shared/models/remembered_account.dart';
+import '../../shared/models/chat.dart';
 
 final sharedPreferencesProvider = Provider<SharedPreferences>((ref) {
   throw UnimplementedError('SharedPreferences no inicializadas');
@@ -28,6 +32,26 @@ final emailOtpSessionProvider =
     StateNotifierProvider<EmailOtpSessionController, EmailOtpSession>((ref) {
   return EmailOtpSessionController(ref.watch(appPreferencesServiceProvider));
 });
+
+final rememberedAccountsProvider =
+    StateNotifierProvider<RememberedAccountsController, List<RememberedAccount>>(
+  (ref) => RememberedAccountsController(ref.watch(appPreferencesServiceProvider)),
+);
+
+final activeSessionViewProvider =
+    StateNotifierProvider<ActiveSessionViewController, String>(
+  (ref) => ActiveSessionViewController(ref.watch(appPreferencesServiceProvider)),
+);
+
+final activeAccountUidProvider =
+    StateNotifierProvider<ActiveAccountUidController, String>(
+  (ref) => ActiveAccountUidController(ref.watch(appPreferencesServiceProvider)),
+);
+
+final cachedChatsProvider =
+    StateNotifierProvider<CachedChatsController, Map<String, List<Chat>>>(
+  (ref) => CachedChatsController(ref.watch(appPreferencesServiceProvider)),
+);
 
 class EmailOtpSession {
   const EmailOtpSession({
@@ -97,6 +121,11 @@ class AppPreferencesService {
   static const _hybridRelayEnabledKey = 'hybrid_relay_enabled';
   static const _hybridGatewayEnabledKey = 'hybrid_gateway_enabled';
   static const _hybridRelayTermsAcceptedKey = 'hybrid_relay_terms_accepted';
+  static const _rememberedAccountsKey = 'remembered_accounts_v1';
+  static const _activeSessionViewKey = 'active_session_view';
+  static const _activeAccountUidKey = 'active_account_uid';
+  static const _cachedChatsPrefix = 'cached_chats_v1_';
+  static const _localDeviceIdKey = 'local_device_id_v1';
 
   // --- NUEVAS CLAVES PARA CORREO MODERNO ---
   static const _userSignatureKey = 'user_professional_signature';
@@ -327,6 +356,91 @@ class AppPreferencesService {
     }
     return _preferences.setBool(_hybridRelayTermsAcceptedKey, value);
   }
+
+  List<RememberedAccount> getRememberedAccounts() {
+    final raw = _preferences.getString(_rememberedAccountsKey);
+    if (raw == null || raw.isEmpty) return const [];
+    try {
+      final decoded = jsonDecode(raw) as List<dynamic>;
+      return decoded
+          .whereType<Map>()
+          .map((item) => RememberedAccount.fromMap(item.cast<String, dynamic>()))
+          .where((account) => account.uid.isNotEmpty)
+          .toList()
+        ..sort((a, b) => b.lastUsedAtMs.compareTo(a.lastUsedAtMs));
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<void> setRememberedAccounts(List<RememberedAccount> accounts) {
+    final payload = jsonEncode(accounts.map((account) => account.toMap()).toList());
+    return _preferences.setString(_rememberedAccountsKey, payload);
+  }
+
+  String getActiveSessionView() =>
+      _preferences.getString(_activeSessionViewKey) ?? 'all';
+
+  Future<void> setActiveSessionView(String value) {
+    return _preferences.setString(_activeSessionViewKey, value);
+  }
+
+  String getActiveAccountUid() =>
+      _preferences.getString(_activeAccountUidKey) ?? '';
+
+  Future<void> setActiveAccountUid(String value) {
+    return _preferences.setString(_activeAccountUidKey, value);
+  }
+
+  Map<String, List<Chat>> getAllCachedChats() {
+    final keys = _preferences
+        .getKeys()
+        .where((key) => key.startsWith(_cachedChatsPrefix));
+    final result = <String, List<Chat>>{};
+    for (final key in keys) {
+      final uid = key.replaceFirst(_cachedChatsPrefix, '');
+      final raw = _preferences.getString(key);
+      if (uid.isEmpty || raw == null || raw.isEmpty) continue;
+      try {
+        final decoded = jsonDecode(raw) as List<dynamic>;
+        result[uid] = decoded
+            .whereType<Map>()
+            .map((item) => item.cast<String, dynamic>())
+            .map((item) {
+              final id = item['id']?.toString() ?? '';
+              return Chat.fromMap(id, item);
+            })
+            .where((chat) => chat.id.isNotEmpty)
+            .toList();
+      } catch (_) {
+        result[uid] = const [];
+      }
+    }
+    return result;
+  }
+
+  Future<void> setCachedChatsForUser(String uid, List<Chat> chats) {
+    final key = '$_cachedChatsPrefix$uid';
+    final payload = jsonEncode(
+      chats
+          .map((chat) => {
+                'id': chat.id,
+                ...chat.toMap(),
+              })
+          .toList(),
+    );
+    return _preferences.setString(key, payload);
+  }
+
+  String getOrCreateLocalDeviceId() {
+    final existing = _preferences.getString(_localDeviceIdKey);
+    if (existing != null && existing.isNotEmpty) {
+      return existing;
+    }
+    final created = const Uuid().v4();
+    _preferences.setString(_localDeviceIdKey, created);
+    return created;
+  }
 }
 
 class ThemeModeController extends StateNotifier<ThemeMode> {
@@ -395,5 +509,64 @@ class EmailOtpSessionController extends StateNotifier<EmailOtpSession> {
       return const EmailOtpSession();
     }
     return session;
+  }
+}
+
+class RememberedAccountsController extends StateNotifier<List<RememberedAccount>> {
+  RememberedAccountsController(this._service)
+      : super(_service.getRememberedAccounts());
+
+  final AppPreferencesService _service;
+
+  Future<void> remember(RememberedAccount account) async {
+    final updated = [
+      account,
+      ...state.where((item) => item.uid != account.uid),
+    ]..sort((a, b) => b.lastUsedAtMs.compareTo(a.lastUsedAtMs));
+    state = updated;
+    await _service.setRememberedAccounts(updated);
+  }
+
+  Future<void> remove(String uid) async {
+    state = state.where((item) => item.uid != uid).toList();
+    await _service.setRememberedAccounts(state);
+  }
+}
+
+class ActiveSessionViewController extends StateNotifier<String> {
+  ActiveSessionViewController(this._service)
+      : super(_service.getActiveSessionView());
+
+  final AppPreferencesService _service;
+
+  Future<void> setView(String value) async {
+    state = value;
+    await _service.setActiveSessionView(value);
+  }
+}
+
+class ActiveAccountUidController extends StateNotifier<String> {
+  ActiveAccountUidController(this._service)
+      : super(_service.getActiveAccountUid());
+
+  final AppPreferencesService _service;
+
+  Future<void> setUid(String value) async {
+    state = value;
+    await _service.setActiveAccountUid(value);
+  }
+}
+
+class CachedChatsController extends StateNotifier<Map<String, List<Chat>>> {
+  CachedChatsController(this._service) : super(_service.getAllCachedChats());
+
+  final AppPreferencesService _service;
+
+  Future<void> setChatsForUser(String uid, List<Chat> chats) async {
+    state = {
+      ...state,
+      uid: chats,
+    };
+    await _service.setCachedChatsForUser(uid, chats);
   }
 }

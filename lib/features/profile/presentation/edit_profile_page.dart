@@ -124,9 +124,21 @@ class _EditProfilePageState extends ConsumerState<EditProfilePage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Identificador',
-                          style: Theme.of(context).textTheme.labelLarge,
+                        Row(
+                          children: [
+                            Text(
+                              'Identificador',
+                              style: Theme.of(context).textTheme.labelLarge,
+                            ),
+                            if (user.isVerified) ...[
+                              const SizedBox(width: 8),
+                              const Icon(
+                                Icons.verified_rounded,
+                                color: Colors.blueAccent,
+                                size: 18,
+                              ),
+                            ],
+                          ],
                         ),
                         const SizedBox(height: 6),
                         Text(

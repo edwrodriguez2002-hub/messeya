@@ -25,6 +25,7 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
   final Set<String> _selectedIds = {};
   bool _loadingUsers = false;
   bool _saving = false;
+  bool _billingBusy = false;
 
   @override
   void initState() {
@@ -70,6 +71,22 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
         await ref.read(profileRepositoryProvider).getCurrentUser();
     if (currentUser == null) return;
 
+    final allowedByDemoAccess =
+        ProfileRepository.hasCompanyTesterAccess(currentUser);
+    final allowedByBilling =
+        currentUser.canCreateCompanies || allowedByDemoAccess;
+    if (!mounted) return;
+    if (!allowedByBilling) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Primero debes activar o restaurar la suscripción empresarial para habilitar la creación de centros privados.',
+          ),
+        ),
+      );
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       final selectedUsers =
@@ -80,6 +97,8 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
                 name: name,
                 description: _descriptionController.text.trim(),
                 initialMembers: selectedUsers,
+                allowedByBilling: allowedByBilling,
+                createdAsDemo: allowedByDemoAccess,
               );
       if (!mounted) return;
       context.go('/companies/$companyId/admin?focusBilling=1');
@@ -93,16 +112,36 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
     }
   }
 
+  Future<void> _runBillingAction(
+    Future<void> Function() action,
+  ) async {
+    setState(() => _billingBusy = true);
+    try {
+      await action();
+    } catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error.toString().replaceFirst('Exception: ', '')),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _billingBusy = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final billingAvailability = ref.watch(companyBillingAvailabilityProvider);
     final currentAppUser = ref.watch(currentAppUserProvider).valueOrNull;
-    final hasBusinessBypass = currentAppUser?.usernameLower == 'kdiax011';
+    final hasDemoAccess =
+        ProfileRepository.hasCompanyTesterAccess(currentAppUser);
+    final hasPurchaseAccess = currentAppUser?.canCreateCompanies == true;
     final billingReady =
-        billingAvailability.valueOrNull?.isReady == true || hasBusinessBypass;
+        hasPurchaseAccess || hasDemoAccess;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Crear empresa')),
+      appBar: AppBar(title: const Text('Crear centro privado')),
       body: ListView(
         padding: const EdgeInsets.all(20),
         children: [
@@ -113,14 +152,14 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Empresa privada dentro de Messeya',
+                    'Centro privado de comunicación',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
                           fontWeight: FontWeight.w800,
                         ),
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Crea el espacio de tu empresa desde la app y activa el plan empresarial con Google Play para habilitar canales internos y acceso restringido a miembros.',
+                    'Crea el espacio interno de tu empresa y agrega solo a las personas autorizadas. El creador quedara como dueño y podra asignar administradores para gestionar miembros y canales.',
                   ),
                   const SizedBox(height: 14),
                   billingAvailability.when(
@@ -144,26 +183,33 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
                                 ),
                                 const _InfoChip(
                                   icon: Icons.lock_outline_rounded,
-                                  label: 'Acceso solo para miembros',
+                                  label: 'Acceso privado por miembros',
+                                ),
+                                const _InfoChip(
+                                  icon: Icons.campaign_rounded,
+                                  label: 'Canal General incluido',
                                 ),
                               ],
                             ),
                           if (product != null) const SizedBox(height: 12),
                           _BillingNotice(
-                            message: hasBusinessBypass
-                                ? 'Acceso especial habilitado para @kdiax011. Puedes crear la empresa y usar el flujo empresarial aunque Google Play no este listo en este dispositivo.'
-                                : availability.message,
-                            ready: availability.isReady || hasBusinessBypass,
+                            message: hasDemoAccess
+                                ? 'Acceso demo habilitado para pruebas internas. Puedes crear empresas de prueba aunque Google Play no esté listo en este dispositivo.'
+                                : hasPurchaseAccess
+                                    ? 'Tu cuenta ya tiene la suscripción empresarial verificada. Ya puedes crear centros privados.'
+                                    : availability.message,
+                            ready:
+                                hasPurchaseAccess || availability.isReady || hasDemoAccess,
                           ),
                         ],
                       );
                     },
                     loading: () => const LinearProgressIndicator(),
                     error: (_, __) => _BillingNotice(
-                      message: hasBusinessBypass
-                          ? 'Acceso especial habilitado para @kdiax011. Puedes continuar aunque el plugin de Google Play falle en este equipo.'
+                      message: hasDemoAccess
+                          ? 'Acceso demo habilitado para pruebas internas. Puedes seguir creando empresas de prueba aunque Google Play falle en este equipo.'
                           : 'No pudimos conectar con Google Play desde este equipo. Pruebalo en un Android fisico con Play Store.',
-                      ready: hasBusinessBypass,
+                      ready: hasDemoAccess,
                     ),
                   ),
                 ],
@@ -244,10 +290,102 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
                 ),
                 const SizedBox(width: 12),
                 const Expanded(
-                  child: Text(
-                      'La empresa solo se puede crear cuando el plan empresarial este disponible en Google Play. Despues te llevaremos al panel para activar o restaurar la suscripcion.'),
+                      child: Text(
+                      'El centro privado solo se puede crear cuando tu cuenta ya tiene la suscripción empresarial verificada o acceso demo de pruebas. Al terminar, entrarás al panel para gestionar miembros, administradores y canales.'),
                 ),
               ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Activar permiso para crear empresas',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Compra, restaura o verifica tu suscripción en Google Play. Cuando quede validada, tu cuenta recibirá automáticamente el permiso para crear centros privados.',
+                  ),
+                  const SizedBox(height: 14),
+                  Wrap(
+                    spacing: 12,
+                    runSpacing: 12,
+                    children: [
+                      FilledButton.icon(
+                        onPressed: _billingBusy
+                            ? null
+                            : () {
+                                final messenger =
+                                    ScaffoldMessenger.of(context);
+                                _runBillingAction(() async {
+                                  final result = await ref
+                                      .read(companyBillingServiceProvider)
+                                      .purchaseCompanyPlan();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text(result.message)),
+                                  );
+                                });
+                              },
+                        icon: _billingBusy
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.workspace_premium_rounded),
+                        label: const Text('Comprar'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _billingBusy
+                            ? null
+                            : () {
+                                final messenger =
+                                    ScaffoldMessenger.of(context);
+                                _runBillingAction(() async {
+                                  final result = await ref
+                                      .read(companyBillingServiceProvider)
+                                      .restoreCompanyPlan();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text(result.message)),
+                                  );
+                                });
+                              },
+                        icon: const Icon(Icons.restore_rounded),
+                        label: const Text('Restaurar'),
+                      ),
+                      OutlinedButton.icon(
+                        onPressed: _billingBusy
+                            ? null
+                            : () {
+                                final messenger =
+                                    ScaffoldMessenger.of(context);
+                                _runBillingAction(() async {
+                                  final result = await ref
+                                      .read(companyBillingServiceProvider)
+                                      .refreshCompanyPlan();
+                                  if (!mounted) return;
+                                  messenger.showSnackBar(
+                                    SnackBar(content: Text(result.message)),
+                                  );
+                                });
+                              },
+                        icon: const Icon(Icons.sync_rounded),
+                        label: const Text('Verificar'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
@@ -266,7 +404,7 @@ class _CreateCompanyPageState extends ConsumerState<CreateCompanyPage> {
                 _saving
                     ? 'Creando empresa...'
                     : billingReady
-                        ? 'Crear empresa y ver plan'
+                        ? 'Crear centro privado'
                         : 'Bloqueado hasta tener plan',
               ),
             ),

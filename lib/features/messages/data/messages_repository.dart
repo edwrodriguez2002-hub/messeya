@@ -177,9 +177,11 @@ class MessagesRepository {
 
     batch.update(_chats.doc(chatId), updates);
     await batch.commit();
-    await _notifyPushBackend(
-      chatId: chatId,
-      messageId: messageRef.id,
+    unawaited(
+      _notifyPushBackend(
+        chatId: chatId,
+        messageId: messageRef.id,
+      ),
     );
 
     if (files.isNotEmpty) {

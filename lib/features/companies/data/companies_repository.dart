@@ -203,8 +203,29 @@ class CompaniesRepository {
     required String name,
     required String description,
     List<AppUser> initialMembers = const [],
+    bool allowedByBilling = false,
+    bool createdAsDemo = false,
   }) async {
+    if (!allowedByBilling) {
+      throw Exception(
+        'La suscripción empresarial debe estar disponible desde Google Play antes de crear la empresa.',
+      );
+    }
+
     final companyRef = _companies.doc();
+    final ownerSnapshot = await _users.doc(owner.uid).get();
+    final ownerData = ownerSnapshot.data() ?? const <String, dynamic>{};
+    final subscriptionProductId =
+        ownerData['companySubscriptionProductId'] as String? ?? '';
+    final subscriptionBasePlanId =
+        ownerData['companySubscriptionBasePlanId'] as String? ?? '';
+    final subscriptionOfferId =
+        ownerData['companySubscriptionOfferId'] as String? ?? '';
+    final subscriptionRenewsAt = ownerData['companySubscriptionRenewsAt'];
+    final billingLastVerifiedAt =
+        ownerData['companySubscriptionLastVerifiedAt'];
+    final ownerPlanStatus =
+        ownerData['companySubscriptionPlanStatus'] as String? ?? 'active';
     final memberIds = <String>{
       owner.uid,
       ...initialMembers.map((user) => user.uid)
@@ -217,16 +238,19 @@ class CompaniesRepository {
       'ownerId': owner.uid,
       'adminIds': [owner.uid],
       'memberIds': memberIds.toList(),
-      'planStatus': 'trial',
+      'planStatus': createdAsDemo ? 'active' : ownerPlanStatus,
       'planName': 'business',
-      'planSource': '',
+      'planSource': createdAsDemo ? 'demo' : 'google_play',
       'logoUrl': '',
-      'subscriptionProductId': '',
-      'subscriptionBasePlanId': '',
-      'subscriptionOfferId': '',
-      'subscriptionRenewsAt': null,
-      'billingLastVerifiedAt': null,
-      'billingStatusMessage': 'Activa tu suscripcion desde Google Play.',
+      'subscriptionProductId': subscriptionProductId,
+      'subscriptionBasePlanId': subscriptionBasePlanId,
+      'subscriptionOfferId': subscriptionOfferId,
+      'subscriptionRenewsAt': createdAsDemo ? null : subscriptionRenewsAt,
+      'billingLastVerifiedAt':
+          createdAsDemo ? null : billingLastVerifiedAt,
+      'billingStatusMessage': createdAsDemo
+          ? 'Empresa creada en modo demo para pruebas internas.'
+          : 'Suscripción empresarial verificada en Google Play.',
       'createdAt': FieldValue.serverTimestamp(),
     });
 
@@ -238,6 +262,13 @@ class CompaniesRepository {
     }
 
     await batch.commit();
+    await _createDefaultCompanyChannels(
+      companyId: companyRef.id,
+      companyName: name.trim(),
+      companyDescription: description.trim(),
+      owner: owner,
+      initialMembers: initialMembers,
+    );
 
     return companyRef.id;
   }
@@ -247,6 +278,13 @@ class CompaniesRepository {
     required List<AppUser> users,
   }) async {
     if (users.isEmpty) return;
+    final company = await _requireCompany(companyId);
+    final actorId = _requireActiveUid();
+    if (!company.canManageMembers(actorId)) {
+      throw Exception(
+        'Solo el creador o un administrador puede agregar miembros a este centro privado.',
+      );
+    }
     final companyRef = _companies.doc(companyId);
     final batch = _firestore.batch();
     batch.set(
@@ -272,6 +310,16 @@ class CompaniesRepository {
     required String companyId,
     required String userId,
   }) async {
+    final company = await _requireCompany(companyId);
+    final actorId = _requireActiveUid();
+    if (!company.canManageMembers(actorId)) {
+      throw Exception(
+        'Solo el creador o un administrador puede eliminar miembros.',
+      );
+    }
+    if (userId == company.ownerId) {
+      throw Exception('El creador del centro privado no puede ser eliminado.');
+    }
     final batch = _firestore.batch();
     batch.set(
         _companies.doc(companyId),
@@ -289,6 +337,16 @@ class CompaniesRepository {
     required String userId,
     required bool enabled,
   }) async {
+    final company = await _requireCompany(companyId);
+    final actorId = _requireActiveUid();
+    if (!company.isOwner(actorId)) {
+      throw Exception(
+        'Solo el creador puede otorgar o quitar el rol de administrador.',
+      );
+    }
+    if (!company.memberIds.contains(userId)) {
+      throw Exception('Solo un miembro agregado puede ser administrador.');
+    }
     await _companies.doc(companyId).set({
       'adminIds': enabled
           ? FieldValue.arrayUnion([userId])
@@ -302,8 +360,18 @@ class CompaniesRepository {
     required String title,
     required String description,
     required bool onlyAdminsCanPost,
+    String channelKind = 'custom',
     List<AppUser> selectedUsers = const [],
   }) async {
+    final actorId = _requireActiveUid();
+    if (!company.canCreateChannels(actorId)) {
+      throw Exception(
+        'Solo el creador o un administrador puede crear canales internos.',
+      );
+    }
+    if (!company.isMember(currentUser.uid)) {
+      throw Exception('Debes pertenecer a la empresa para crear canales.');
+    }
     final chatRef = _chats.doc(_chats.doc().id.toLowerCase());
     final members = <String>{
       currentUser.uid,
@@ -362,6 +430,11 @@ class CompaniesRepository {
       'scope': 'company',
       'companyId': company.id,
       'companyName': company.name,
+      'companyVisibility': 'private',
+      'companyChannelKind':
+          channelKind.trim().isEmpty ? 'custom' : channelKind.trim(),
+      'isDefaultCompanyChannel': false,
+      'createdByRole': company.isOwner(actorId) ? 'owner' : 'admin',
     });
 
     await _ensureStreamCompanyChannel(
@@ -371,6 +444,7 @@ class CompaniesRepository {
       title: title,
       description: description,
       onlyAdminsCanPost: onlyAdminsCanPost,
+      channelKind: channelKind,
       selectedUsers: selectedUsers,
     );
 
@@ -382,6 +456,11 @@ class CompaniesRepository {
     required AppUser currentUser,
     required AppUser otherUser,
   }) async {
+    if (!company.isMember(currentUser.uid) || !company.isMember(otherUser.uid)) {
+      throw Exception(
+        'Los mensajes privados de empresa solo se permiten entre miembros agregados.',
+      );
+    }
     final ids = [currentUser.uid, otherUser.uid]..sort();
     final chatId = '${company.id}_${ids.join('_')}'.toLowerCase();
     final doc = _chats.doc(chatId);
@@ -433,6 +512,9 @@ class CompaniesRepository {
         'scope': 'company',
         'companyId': company.id,
         'companyName': company.name,
+        'companyVisibility': 'private',
+        'companyChannelKind': 'direct',
+        'isDefaultCompanyChannel': false,
       });
     }
 
@@ -459,6 +541,12 @@ class CompaniesRepository {
     final uid = _uid;
     if (uid == null || uid.isEmpty) {
       throw Exception('No hay una sesion activa.');
+    }
+    final company = await _requireCompany(companyId);
+    if (!company.isMember(uid)) {
+      throw Exception(
+        'Solo los miembros agregados pueden editar su perfil dentro de la empresa.',
+      );
     }
 
     await _memberProfiles(companyId).doc(uid).set({
@@ -493,6 +581,7 @@ class CompaniesRepository {
     required String title,
     required String description,
     required bool onlyAdminsCanPost,
+    required String channelKind,
     required List<AppUser> selectedUsers,
   }) async {
     final client = _streamClient;
@@ -540,6 +629,10 @@ class CompaniesRepository {
         'scope': 'company',
         'companyId': company.id,
         'companyName': company.name,
+        'companyVisibility': 'private',
+        'companyChannelKind':
+            channelKind.trim().isEmpty ? 'custom' : channelKind.trim(),
+        'isDefaultCompanyChannel': false,
       },
     );
 
@@ -591,9 +684,124 @@ class CompaniesRepository {
         'scope': 'company',
         'companyId': company.id,
         'companyName': company.name,
+        'companyVisibility': 'private',
+        'companyChannelKind': 'direct',
+        'isDefaultCompanyChannel': false,
       },
     );
 
     await channel.watch();
+  }
+
+  String _requireActiveUid() {
+    final uid = _uid;
+    if (uid == null || uid.isEmpty) {
+      throw Exception('No hay una sesion activa.');
+    }
+    return uid;
+  }
+
+  Future<Company> _requireCompany(String companyId) async {
+    final snapshot = await _companies.doc(companyId).get();
+    if (!snapshot.exists) {
+      throw Exception('La empresa no fue encontrada.');
+    }
+    return Company.fromDoc(snapshot);
+  }
+
+  Future<void> _createDefaultCompanyChannels({
+    required String companyId,
+    required String companyName,
+    required String companyDescription,
+    required AppUser owner,
+    required List<AppUser> initialMembers,
+  }) async {
+    final members = <AppUser>[owner, ...initialMembers];
+    final uniqueMembers = <String, AppUser>{
+      for (final member in members) member.uid: member,
+    }.values.toList();
+    final memberIds = uniqueMembers.map((user) => user.uid).toList();
+    final defaults = <({
+      String slug,
+      String title,
+      String description,
+      bool onlyAdminsCanPost,
+      String kind,
+    })>[
+      (
+        slug: 'general',
+        title: 'General',
+        description: companyDescription.isEmpty
+            ? 'Canal principal del centro privado de $companyName.'
+            : companyDescription,
+        onlyAdminsCanPost: false,
+        kind: 'general',
+      ),
+      (
+        slug: 'announcements',
+        title: 'Anuncios',
+        description:
+            'Canal oficial para avisos importantes del creador y administradores.',
+        onlyAdminsCanPost: true,
+        kind: 'announcements',
+      ),
+      (
+        slug: 'teams',
+        title: 'Equipos',
+        description:
+            'Canal para coordinar trabajo interno, tareas y conversaciones entre integrantes.',
+        onlyAdminsCanPost: false,
+        kind: 'teams',
+      ),
+    ];
+
+    for (final channel in defaults) {
+      await _chats.doc('${companyId}_${channel.slug}'.toLowerCase()).set({
+        'members': memberIds,
+        'memberNames': {
+          for (final user in uniqueMembers) user.uid: user.name,
+        },
+        'memberUsernames': {
+          for (final user in uniqueMembers) user.uid: user.username,
+        },
+        'memberPhotos': {
+          for (final user in uniqueMembers) user.uid: user.photoUrl,
+        },
+        'createdAt': FieldValue.serverTimestamp(),
+        'lastMessage': '',
+        'lastMessageAt': FieldValue.serverTimestamp(),
+        'lastMessageSenderId': '',
+        'type': 'channel',
+        'title': channel.title,
+        'description': channel.description,
+        'adminIds': [owner.uid],
+        'moderatorIds': [],
+        'pinnedBy': [],
+        'archivedBy': [],
+        'typingUsers': [],
+        'recordingUsers': [],
+        'ownerId': owner.uid,
+        'photoUrl': '',
+        'coverUrl': '',
+        'inviteCode': '',
+        'pinnedMessageId': '',
+        'onlyAdminsCanPost': channel.onlyAdminsCanPost,
+        'directMessageRequestStatus': 'accepted',
+        'directMessageRequestInitiatorId': '',
+        'directMessageRequestRecipientId': '',
+        'directMessageRequestLimit': 0,
+        'directMessageRequestSentCount': 0,
+        'unreadCounts': {
+          for (final memberId in memberIds) memberId: 0,
+        },
+        'scope': 'company',
+        'companyId': companyId,
+        'companyName': companyName,
+        'companyVisibility': 'private',
+        'companyChannelKind': channel.kind,
+        'isDefaultCompanyChannel': true,
+        'createdByRole': 'owner',
+      }, SetOptions(merge: true));
+    }
   }
 }

@@ -14,6 +14,9 @@ class AppUser {
     required this.lastSeen,
     this.publicKey = '',
     this.isVerified = false,
+    this.canCreateCompanies = false,
+    this.canVerifyUsers = false,
+    this.isCompanyTester = false,
   });
 
   final String uid;
@@ -28,6 +31,9 @@ class AppUser {
   final DateTime? lastSeen;
   final String publicKey;
   final bool isVerified;
+  final bool canCreateCompanies;
+  final bool canVerifyUsers;
+  final bool isCompanyTester;
 
   factory AppUser.fromMap(Map<String, dynamic> map, {String? id}) {
     // Manejo robusto para isVerified (acepta boolean o string)
@@ -37,6 +43,30 @@ class AppUser {
       verified = verifiedRaw;
     } else if (verifiedRaw is String) {
       verified = verifiedRaw.toLowerCase() == 'true';
+    }
+
+    final canCreateCompaniesRaw = map['canCreateCompanies'];
+    bool canCreateCompanies = false;
+    if (canCreateCompaniesRaw is bool) {
+      canCreateCompanies = canCreateCompaniesRaw;
+    } else if (canCreateCompaniesRaw is String) {
+      canCreateCompanies = canCreateCompaniesRaw.toLowerCase() == 'true';
+    }
+
+    final canVerifyUsersRaw = map['canVerifyUsers'];
+    bool canVerifyUsers = false;
+    if (canVerifyUsersRaw is bool) {
+      canVerifyUsers = canVerifyUsersRaw;
+    } else if (canVerifyUsersRaw is String) {
+      canVerifyUsers = canVerifyUsersRaw.toLowerCase() == 'true';
+    }
+
+    final isCompanyTesterRaw = map['isCompanyTester'];
+    bool isCompanyTester = false;
+    if (isCompanyTesterRaw is bool) {
+      isCompanyTester = isCompanyTesterRaw;
+    } else if (isCompanyTesterRaw is String) {
+      isCompanyTester = isCompanyTesterRaw.toLowerCase() == 'true';
     }
 
     return AppUser(
@@ -52,6 +82,9 @@ class AppUser {
       lastSeen: _fromTimestamp(map['lastSeen']),
       publicKey: map['publicKey'] as String? ?? '',
       isVerified: verified,
+      canCreateCompanies: canCreateCompanies,
+      canVerifyUsers: canVerifyUsers,
+      isCompanyTester: isCompanyTester,
     );
   }
 
@@ -73,6 +106,9 @@ class AppUser {
       'lastSeen': lastSeen == null ? null : Timestamp.fromDate(lastSeen!),
       'publicKey': publicKey,
       'isVerified': isVerified,
+      'canCreateCompanies': canCreateCompanies,
+      'canVerifyUsers': canVerifyUsers,
+      'isCompanyTester': isCompanyTester,
     };
   }
 
@@ -89,6 +125,9 @@ class AppUser {
     DateTime? lastSeen,
     String? publicKey,
     bool? isVerified,
+    bool? canCreateCompanies,
+    bool? canVerifyUsers,
+    bool? isCompanyTester,
   }) {
     return AppUser(
       uid: uid ?? this.uid,
@@ -103,6 +142,9 @@ class AppUser {
       lastSeen: lastSeen ?? this.lastSeen,
       publicKey: publicKey ?? this.publicKey,
       isVerified: isVerified ?? this.isVerified,
+      canCreateCompanies: canCreateCompanies ?? this.canCreateCompanies,
+      canVerifyUsers: canVerifyUsers ?? this.canVerifyUsers,
+      isCompanyTester: isCompanyTester ?? this.isCompanyTester,
     );
   }
 

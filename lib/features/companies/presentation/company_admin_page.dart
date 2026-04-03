@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
+import '../../../shared/models/company.dart';
 import '../../../shared/models/company_member_profile.dart';
 import '../../../shared/widgets/async_value_widget.dart';
 import '../../../shared/widgets/user_avatar.dart';
@@ -149,6 +150,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
     final titleController = TextEditingController();
     final descriptionController = TextEditingController();
     bool onlyAdminsCanPost = false;
+    String channelKind = 'custom';
 
     final accepted = await showModalBottomSheet<bool>(
       context: context,
@@ -181,6 +183,33 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                     controller: descriptionController,
                     maxLines: 2,
                     decoration: const InputDecoration(labelText: 'Descripcion'),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: channelKind,
+                    decoration:
+                        const InputDecoration(labelText: 'Tipo de canal'),
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'teams',
+                        child: Text('Equipo'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'project',
+                        child: Text('Proyecto'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'support',
+                        child: Text('Soporte'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'custom',
+                        child: Text('Personalizado'),
+                      ),
+                    ],
+                    onChanged: (value) {
+                      setModalState(() => channelKind = value ?? 'custom');
+                    },
                   ),
                   const SizedBox(height: 12),
                   SwitchListTile(
@@ -222,6 +251,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                 title: titleController.text.trim(),
                 description: descriptionController.text.trim(),
                 onlyAdminsCanPost: onlyAdminsCanPost,
+                channelKind: channelKind,
               );
       if (!mounted) return;
       context.push(
@@ -237,7 +267,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
     final currentUserId = ref.watch(currentUserProvider)?.uid ?? '';
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Panel empresa')),
+      appBar: AppBar(title: const Text('Centro privado')),
       body: AsyncValueWidget(
         value: companyAsync,
         data: (company) {
@@ -319,7 +349,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
-                            'Tu empresa ya fue creada. El siguiente paso es activar o restaurar el plan desde el bloque de facturacion de abajo.',
+                          'Tu centro privado ya fue creado. El siguiente paso es activar o restaurar el plan desde el bloque de facturacion de abajo.',
                           ),
                         ),
                       ],
@@ -335,15 +365,17 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Facturacion Play Store',
+                        'Suscripción empresarial',
                         style: Theme.of(context).textTheme.titleLarge?.copyWith(
                               fontWeight: FontWeight.w800,
                             ),
                       ),
                       const SizedBox(height: 8),
                       const Text(
-                        'Activa, restaura o sincroniza el acceso empresarial usando la suscripcion oficial de Google Play.',
+                        'Compra, restaura o verifica tu suscripción para mantener activo tu centro privado de comunicación y sus canales internos.',
                       ),
+                      const SizedBox(height: 14),
+                      _BillingStatusCard(company: company),
                       const SizedBox(height: 14),
                       ref.watch(companySubscriptionProductProvider).when(
                             data: (product) {
@@ -400,7 +432,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                                     ),
                                   )
                                 : const Icon(Icons.play_circle_fill_rounded),
-                            label: const Text('Activar plan'),
+                            label: const Text('Comprar'),
                           ),
                           OutlinedButton.icon(
                             onPressed: isAdmin && !_billingBusy
@@ -411,7 +443,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                                     )
                                 : null,
                             icon: const Icon(Icons.restore_rounded),
-                            label: const Text('Restaurar compra'),
+                            label: const Text('Restaurar'),
                           ),
                           OutlinedButton.icon(
                             onPressed: isAdmin && !_billingBusy
@@ -422,7 +454,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                                     )
                                 : null,
                             icon: const Icon(Icons.sync_rounded),
-                            label: const Text('Actualizar estado'),
+                            label: const Text('Verificar'),
                           ),
                           OutlinedButton.icon(
                             onPressed: isAdmin && !_billingBusy
@@ -462,7 +494,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                     child: FilledButton.icon(
                       onPressed: isAdmin && !_working ? _addMembers : null,
                       icon: const Icon(Icons.person_add_alt_rounded),
-                      label: const Text('Agregar miembros'),
+                      label: const Text('Agregar integrantes'),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -484,7 +516,7 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
               ),
               const SizedBox(height: 20),
               Text(
-                'Miembros',
+                        'Integrantes',
                 style: Theme.of(context).textTheme.titleLarge?.copyWith(
                       fontWeight: FontWeight.w800,
                     ),
@@ -495,20 +527,25 @@ class _CompanyAdminPageState extends ConsumerState<CompanyAdminPage> {
                 data: (members) {
                   return Column(
                     children: members.map((member) {
+                      final memberIsOwner = member.user.uid == company.ownerId;
+                      final memberIsAdmin = company.adminIds.contains(member.user.uid);
                       return _CompanyMemberTile(
                         contact: member,
-                        isAdmin: company.adminIds.contains(member.user.uid),
-                        canManage:
+                        isOwner: memberIsOwner,
+                        isAdmin: memberIsAdmin,
+                        canToggleAdmin:
                             isOwner && member.user.uid != company.ownerId,
-                        onToggleAdmin: () =>
-                            ref.read(companiesRepositoryProvider).setAdmin(
+                        canRemove: isAdmin && member.user.uid != company.ownerId,
+                        onToggleAdmin: !isOwner || member.user.uid == company.ownerId
+                            ? null
+                            : () => ref.read(companiesRepositoryProvider).setAdmin(
                                   companyId: company.id,
                                   userId: member.user.uid,
-                                  enabled: !company.adminIds
-                                      .contains(member.user.uid),
+                                  enabled: !memberIsAdmin,
                                 ),
-                        onRemove: () =>
-                            ref.read(companiesRepositoryProvider).removeMember(
+                        onRemove: !isAdmin || member.user.uid == company.ownerId
+                            ? null
+                            : () => ref.read(companiesRepositoryProvider).removeMember(
                                   companyId: company.id,
                                   userId: member.user.uid,
                                 ),
@@ -554,24 +591,136 @@ class _InfoPill extends StatelessWidget {
   }
 }
 
+class _BillingStatusCard extends StatelessWidget {
+  const _BillingStatusCard({
+    required this.company,
+  });
+
+  final Company company;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = _statusMeta(company.planStatus);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: meta.color.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: meta.color.withValues(alpha: 0.24)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(meta.icon, color: meta.color),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Estado actual: ${meta.label}',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(meta.description),
+          if (company.billingStatusMessage.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            Text(company.billingStatusMessage),
+          ],
+          if (company.subscriptionRenewsAt != null) ...[
+            const SizedBox(height: 10),
+            Text(
+              'Renueva el ${DateFormat('dd/MM/yyyy · HH:mm').format(company.subscriptionRenewsAt!)}',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                  ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  ({String label, String description, IconData icon, Color color}) _statusMeta(
+    String status,
+  ) {
+    switch (status) {
+      case 'demo':
+        return (
+          label: 'Demo',
+          description:
+              'Modo de pruebas internas. Úsalo solo para validar el flujo empresarial antes de publicar.',
+          icon: Icons.science_rounded,
+          color: Colors.deepPurpleAccent,
+        );
+      case 'trial':
+        return (
+          label: 'Trial',
+          description:
+              'La empresa fue creada, pero todavía falta activar o restaurar la suscripción en Google Play.',
+          icon: Icons.hourglass_top_rounded,
+          color: Colors.orange,
+        );
+      case 'active':
+        return (
+          label: 'Activa',
+          description:
+              'La suscripción empresarial está vigente y las funciones premium están habilitadas.',
+          icon: Icons.verified_rounded,
+          color: Colors.green,
+        );
+      case 'expired':
+        return (
+          label: 'Expirada',
+          description:
+              'La suscripción venció. Debes comprar o restaurar el plan para recuperar el acceso empresarial.',
+          icon: Icons.error_outline_rounded,
+          color: Colors.redAccent,
+        );
+      default:
+        return (
+          label: status.isEmpty ? 'Sin estado' : status,
+          description:
+              'Verifica el estado en Google Play para mantener tu empresa habilitada.',
+          icon: Icons.info_outline_rounded,
+          color: Colors.blueAccent,
+        );
+    }
+  }
+}
+
 class _CompanyMemberTile extends StatelessWidget {
   const _CompanyMemberTile({
     required this.contact,
+    required this.isOwner,
     required this.isAdmin,
-    required this.canManage,
+    required this.canToggleAdmin,
+    required this.canRemove,
     this.onToggleAdmin,
     this.onRemove,
   });
 
   final CompanyMemberContact contact;
+  final bool isOwner;
   final bool isAdmin;
-  final bool canManage;
+  final bool canToggleAdmin;
+  final bool canRemove;
   final VoidCallback? onToggleAdmin;
   final VoidCallback? onRemove;
 
   @override
   Widget build(BuildContext context) {
-    final adminLabel = isAdmin ? 'Administrador' : 'Miembro';
+    final adminLabel = isOwner
+        ? 'Creador'
+        : isAdmin
+            ? 'Administrador'
+            : 'Integrante';
 
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
@@ -584,25 +733,27 @@ class _CompanyMemberTile extends StatelessWidget {
         subtitle: Text(
           '${contact.subtitle} · $adminLabel',
         ),
-        trailing: canManage
+        trailing: (canToggleAdmin || canRemove)
             ? PopupMenuButton<String>(
                 onSelected: (value) {
                   if (value == 'admin') onToggleAdmin?.call();
                   if (value == 'remove') onRemove?.call();
                 },
                 itemBuilder: (context) => [
-                  PopupMenuItem(
-                    value: 'admin',
-                    child: Text(
-                      isAdmin
-                          ? 'Quitar cargo de administrador'
-                          : 'Asignar cargo de administrador',
+                  if (canToggleAdmin)
+                    PopupMenuItem(
+                      value: 'admin',
+                      child: Text(
+                        isAdmin
+                            ? 'Quitar cargo de administrador'
+                            : 'Asignar cargo de administrador',
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'remove',
-                    child: Text('Eliminar de empresa'),
-                  ),
+                  if (canRemove)
+                    const PopupMenuItem(
+                      value: 'remove',
+                      child: Text('Eliminar del centro privado'),
+                    ),
                 ],
               )
             : null,

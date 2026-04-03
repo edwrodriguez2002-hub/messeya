@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +10,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:stream_chat_flutter_core/stream_chat_flutter_core.dart';
 
 import 'core/config/one_signal_config.dart';
+import 'core/firebase/firebase_multi_session.dart';
+import 'core/firebase/firebase_providers.dart';
 import 'core/services/app_lifecycle_sync.dart';
 import 'core/services/app_pin_lock_gate.dart';
 import 'core/services/app_preferences_service.dart';
@@ -19,6 +21,7 @@ import 'core/services/one_signal_service.dart';
 import 'core/services/stream_chat_service.dart';
 import 'core/theme/app_theme.dart';
 import 'firebase_options.dart';
+import 'features/auth/data/auth_repository.dart';
 import 'routing/app_router.dart';
 
 Future<void> main() async {
@@ -37,6 +40,10 @@ Future<void> main() async {
   }
 
   final sharedPreferences = await SharedPreferences.getInstance();
+  final preferencesService = AppPreferencesService(sharedPreferences);
+  await initializeRememberedSessionApps(
+    preferencesService.getRememberedAccounts(),
+  );
 
   final container = ProviderContainer(
     overrides: [
@@ -45,9 +52,10 @@ Future<void> main() async {
   );
 
   final streamChatService = container.read(streamChatServiceProvider);
+  final initialAuth = container.read(firebaseAuthProvider);
 
   unawaited(
-    streamChatService.syncAuthUser(FirebaseAuth.instance.currentUser).catchError((
+    streamChatService.syncAuthUser(initialAuth.currentUser).catchError((
       error,
       stackTrace,
     ) {
@@ -55,13 +63,18 @@ Future<void> main() async {
     }),
   );
 
-  FirebaseAuth.instance.authStateChanges().listen((user) {
-    unawaited(
-      streamChatService.syncAuthUser(user).catchError((error, stackTrace) {
-        debugPrint('Error sincronizando Stream Chat: $error');
-      }),
-    );
-  });
+  container.listen<AsyncValue<firebase_auth.User?>>(
+    authStateChangesProvider,
+    (_, next) {
+      final user = next.valueOrNull;
+      unawaited(
+        streamChatService.syncAuthUser(user).catchError((error, stackTrace) {
+          debugPrint('Error sincronizando Stream Chat: $error');
+        }),
+      );
+    },
+    fireImmediately: true,
+  );
 
   FlutterError.onError = (details) {
     debugPrint('Flutter Error: ${details.exception}');

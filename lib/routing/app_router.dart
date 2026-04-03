@@ -14,7 +14,6 @@ import '../features/chats/presentation/home_page.dart';
 import '../features/chats/presentation/archived_chats_page.dart';
 import '../features/chats/presentation/space_info_page.dart';
 import '../features/companies/presentation/company_admin_page.dart';
-import '../features/companies/presentation/create_company_page.dart';
 import '../features/companies/presentation/edit_company_profile_page.dart';
 import '../features/linked_devices/presentation/desktop_link_page.dart';
 import '../features/linked_devices/presentation/link_desktop_scan_page.dart';
@@ -30,6 +29,7 @@ import '../features/search/presentation/search_page.dart';
 import '../features/settings/presentation/legal_document_page.dart';
 import '../features/settings/presentation/app_lock_page.dart';
 import '../features/settings/presentation/settings_page.dart';
+import '../features/settings/presentation/user_verification_page.dart';
 import '../features/statuses/presentation/statuses_page.dart';
 import '../features/statuses/presentation/hidden_status_contacts_page.dart';
 
@@ -46,6 +46,9 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ref.watch(authRepositoryProvider).authStateChanges(),
     ),
     redirect: (context, state) {
+      if (auth.isLoading) {
+        return null;
+      }
       final user = auth.valueOrNull;
       final isLoggedIn = user != null;
       final isAnonymous = user?.isAnonymous ?? false;
@@ -100,7 +103,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       return null;
     },
     routes: [
-      GoRoute(path: '/login', builder: (context, state) => const LoginPage()),
+      GoRoute(
+        path: '/login',
+        builder: (context, state) => LoginPage(
+          targetSwitchUid: state.uri.queryParameters['switchUid'],
+          targetSwitchUsername: state.uri.queryParameters['switchUsername'],
+          targetSwitchName: state.uri.queryParameters['switchName'],
+        ),
+      ),
       GoRoute(
         path: '/desktop-link',
         builder: (context, state) => const DesktopLinkPage(),
@@ -190,6 +200,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings/app-lock',
         builder: (context, state) => const AppLockPage(),
+      ),
+      GoRoute(
+        path: '/settings/user-verification',
+        builder: (context, state) => const UserVerificationPage(),
       ),
       GoRoute(
         path: '/profile/edit',

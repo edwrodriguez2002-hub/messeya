@@ -7,3 +7,11 @@ services:
     buildCommand: npm install
     startCommand: npm run start:onesignal-push
     autoDeploy: true
+  - type: web
+    name: messeya-company-billing
+    env: node
+    rootDir: functions
+    plan: free
+    buildCommand: npm install
+    startCommand: npm run start:company-billing
+    autoDeploy: true

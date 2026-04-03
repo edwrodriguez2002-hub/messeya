@@ -14,6 +14,7 @@ import '../../../core/services/app_preferences_service.dart';
 import '../../../shared/models/app_user.dart';
 import '../../../shared/models/chat.dart';
 import '../../../shared/models/message.dart';
+import '../../../shared/widgets/messeya_ui.dart';
 import '../../auth/data/auth_repository.dart';
 import '../../chats/data/chats_repository.dart';
 import '../../profile/data/blocked_contacts_repository.dart';
@@ -87,9 +88,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: const Text("¿Bloquear contacto?", style: TextStyle(color: Colors.white)),
-        content: const Text("No podrás recibir más correos de esta persona y la conversación se eliminará.", style: TextStyle(color: Colors.white70)),
+        backgroundColor: MesseyaUi.cardFor(context),
+        title: Text(
+          "¿Bloquear contacto?",
+          style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
+        ),
+        content: Text(
+          "No podrás recibir más correos de esta persona y la conversación se eliminará.",
+          style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("CANCELAR")),
           TextButton(
@@ -206,7 +213,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'El envio tardo demasiado. Revisa que Stream y el token provider sigan activos.',
+            'El envío tardó demasiado. Revisa tu conexión e inténtalo otra vez.',
           ),
         ),
       );
@@ -229,13 +236,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
     final targetChat = await showModalBottomSheet<Chat>(
       context: context,
-      backgroundColor: const Color(0xFF1E293B),
+      backgroundColor: MesseyaUi.cardFor(context),
       builder: (context) => SafeArea(
         child: Column(
           children: [
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(16.0),
-              child: Text("Reenviar a...", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
+              child: Text(
+                "Reenviar a...",
+                style: TextStyle(
+                  color: MesseyaUi.textPrimaryFor(context),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              ),
             ),
             Expanded(
               child: ListView.builder(
@@ -246,7 +260,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     ? (chat.memberNames.entries.firstWhere((e) => e.key != ref.read(authRepositoryProvider).currentUser?.uid).value)
                     : chat.title;
                   return ListTile(
-                    title: Text(name, style: const TextStyle(color: Colors.white)),
+                    title: Text(
+                      name,
+                      style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
+                    ),
                     onTap: () => Navigator.pop(context, chat),
                   );
                 },
@@ -267,6 +284,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   Widget build(BuildContext context) {
+    final backgroundColor = MesseyaUi.backgroundFor(context);
+    final surfaceColor = MesseyaUi.cardFor(context);
+    final primaryTextColor = MesseyaUi.textPrimaryFor(context);
+    final mutedTextColor = MesseyaUi.textMutedFor(context);
     final messagesAsync = ref.watch(chatMessagesProvider(widget.chatId));
     final chatAsync = ref.watch(chatProvider(widget.chatId));
     final currentUserId = ref.watch(authRepositoryProvider).currentUser?.uid;
@@ -292,9 +313,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: backgroundColor,
       appBar: AppBar(
-        backgroundColor: const Color(0xFF1E293B),
+        backgroundColor: surfaceColor,
         title: InkWell(
           onTap: () => context.push('/contact/${widget.otherUserId}'),
           child: Column(
@@ -305,7 +326,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 children: [
                   Text(
                     widget.otherUserName, 
-                    style: const TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.bold)
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: primaryTextColor,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   otherUserAsync.when(
                     data: (user) => user?.isVerified == true 
@@ -319,7 +344,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                   ),
                 ],
               ),
-              Text('@${widget.otherUsername}', style: const TextStyle(fontSize: 11, color: Colors.blueGrey)),
+              Text(
+                '@${widget.otherUsername}',
+                style: TextStyle(fontSize: 11, color: mutedTextColor),
+              ),
             ],
           ),
         ),
@@ -347,11 +375,16 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               
               if (isPending && isRecipient) {
                 return Container(
-                  color: Colors.blueAccent.withOpacity(0.1),
+                  color: Colors.blueAccent.withValues(alpha: 0.1),
                   padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
                   child: Row(
                     children: [
-                      const Expanded(child: Text("¿Aceptar correo?", style: TextStyle(color: Colors.white, fontSize: 12))),
+                      Expanded(
+                        child: Text(
+                          "¿Aceptar correo?",
+                          style: TextStyle(color: primaryTextColor, fontSize: 12),
+                        ),
+                      ),
                       TextButton(
                         onPressed: () => ref.read(chatsRepositoryProvider).updateDirectMessageRequest(chatId: widget.chatId, status: 'accepted'),
                         child: const Text("ACEPTAR", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
@@ -404,8 +437,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           showDialog(
                             context: context,
                             builder: (context) => AlertDialog(
-                              backgroundColor: const Color(0xFF1E293B),
-                              title: const Text("Información del mensaje", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                              backgroundColor: MesseyaUi.cardFor(context),
+                              title: Text(
+                                "Información del mensaje",
+                                style: TextStyle(
+                                  color: MesseyaUi.textPrimaryFor(context),
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
                               content: Column(
                                 mainAxisSize: MainAxisSize.min,
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,7 +484,12 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                 );
               },
               loading: () => const Center(child: CircularProgressIndicator()),
-              error: (err, _) => Center(child: Text('Error: $err')),
+              error: (err, _) => Center(
+                child: Text(
+                  'Error: $err',
+                  style: TextStyle(color: primaryTextColor),
+                ),
+              ),
             ),
           ),
           _buildComposer(),
@@ -462,8 +506,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold)),
-            Text(value, style: const TextStyle(color: Colors.white, fontSize: 14)),
+            Text(
+              label,
+              style: TextStyle(
+                color: MesseyaUi.textMutedFor(context),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              value,
+              style: TextStyle(
+                color: MesseyaUi.textPrimaryFor(context),
+                fontSize: 14,
+              ),
+            ),
           ],
         ),
       ],
@@ -474,9 +531,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final result = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E293B),
-        title: Text(forEveryone ? "¿Eliminar para todos?" : "¿Eliminar para mí?", style: const TextStyle(color: Colors.white)),
-        content: const Text("Esta acción no se puede deshacer.", style: TextStyle(color: Colors.white70)),
+        backgroundColor: MesseyaUi.cardFor(context),
+        title: Text(
+          forEveryone ? "¿Eliminar para todos?" : "¿Eliminar para mí?",
+          style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
+        ),
+        content: Text(
+          "Esta acción no se puede deshacer.",
+          style: TextStyle(color: MesseyaUi.textMutedFor(context)),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(context, false), child: const Text("CANCELAR")),
           TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("ELIMINAR", style: TextStyle(color: Colors.redAccent))),
@@ -487,9 +550,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   }
 
   Widget _buildComposer() {
+    final surfaceColor = MesseyaUi.cardFor(context);
+    final primaryTextColor = MesseyaUi.textPrimaryFor(context);
+    final mutedTextColor = MesseyaUi.textMutedFor(context);
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: const BoxDecoration(color: Color(0xFF1E293B), borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      decoration: BoxDecoration(
+        color: surfaceColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+      ),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
@@ -498,7 +567,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 12),
               decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.2),
+                color: MesseyaUi.isDark(context)
+                    ? Colors.black.withValues(alpha: 0.2)
+                    : Colors.black.withValues(alpha: 0.05),
                 borderRadius: BorderRadius.circular(16),
                 border: const Border(left: BorderSide(color: Colors.blue, width: 4)),
               ),
@@ -516,13 +587,13 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           _replyingTo!.text,
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.white70, fontSize: 13),
+                          style: TextStyle(color: mutedTextColor, fontSize: 13),
                         ),
                       ],
                     ),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, size: 20, color: Colors.white54),
+                    icon: Icon(Icons.close, size: 20, color: mutedTextColor),
                     onPressed: () => setState(() => _replyingTo = null),
                   ),
                 ],
@@ -545,16 +616,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             ),
           TextField(
             controller: _subjectController,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-            decoration: const InputDecoration(hintText: 'Asunto (opcional)', hintStyle: TextStyle(color: Colors.blueGrey), border: InputBorder.none),
+            style: TextStyle(color: primaryTextColor, fontWeight: FontWeight.bold),
+            decoration: InputDecoration(
+              hintText: 'Asunto (opcional)',
+              hintStyle: TextStyle(color: mutedTextColor),
+              border: InputBorder.none,
+            ),
           ),
-          const Divider(color: Colors.white10),
+          Divider(color: mutedTextColor.withValues(alpha: 0.18)),
           TextField(
             controller: _bodyController,
             maxLines: 5,
             minLines: 1,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(hintText: 'Redactar mensaje...', hintStyle: TextStyle(color: Colors.blueGrey), border: InputBorder.none),
+            style: TextStyle(color: primaryTextColor),
+            decoration: InputDecoration(
+              hintText: 'Redactar mensaje...',
+              hintStyle: TextStyle(color: mutedTextColor),
+              border: InputBorder.none,
+            ),
           ),
           Row(
             children: [
