@@ -3,7 +3,7 @@ class BackendConfig {
 
   static const String apiBaseUrl = String.fromEnvironment(
     'MESSEYA_COMPANY_BILLING_URL',
-    defaultValue: 'http://192.168.101.81:3020',
+    defaultValue: 'https://messeya-company-billing.onrender.com',
   );
 
   static bool get hasApiBaseUrl => apiBaseUrl.trim().isNotEmpty;
@@ -16,6 +16,11 @@ class BackendConfig {
   static const String androidPackageName = String.fromEnvironment(
     'MESSEYA_ANDROID_PACKAGE_NAME',
     defaultValue: 'com.messeya.chat',
+  );
+
+  static const String playStoreUrl = String.fromEnvironment(
+    'MESSEYA_PLAY_STORE_URL',
+    defaultValue: 'https://play.google.com/store/apps/details?id=com.messeya.chat',
   );
 
   static Uri buildUri(String path) {

@@ -3,6 +3,7 @@ const http = require("http");
 const path = require("path");
 const admin = require("firebase-admin");
 const {google} = require("googleapis");
+const {Resend} = require("resend");
 
 function loadEnvFile(envPath) {
   if (!fs.existsSync(envPath)) return;
@@ -51,6 +52,12 @@ const playPackageName =
   process.env.GOOGLE_PLAY_PACKAGE_NAME || process.env.MESSEYA_ANDROID_PACKAGE_NAME || "com.messeya.chat";
 const fallbackProductId =
   process.env.GOOGLE_PLAY_COMPANY_PRODUCT_ID || process.env.MESSEYA_COMPANY_SUBSCRIPTION_PRODUCT_ID || "";
+const resendApiKey = process.env.RESEND_API_KEY || "";
+const resendFromEmail =
+  process.env.RESEND_FROM_EMAIL || "Messeya <onboarding@resend.dev>";
+const playStoreUrl =
+  process.env.MESSEYA_PLAY_STORE_URL ||
+  `https://play.google.com/store/apps/details?id=${playPackageName}`;
 
 if (!firebaseProjectId || !firebaseClientEmail || !firebasePrivateKey) {
   throw new Error("Faltan credenciales de Firebase Admin en .env.local.");
@@ -80,10 +87,12 @@ const playAuth = new google.auth.GoogleAuth({
   scopes: ["https://www.googleapis.com/auth/androidpublisher"],
 });
 const androidpublisher = google.androidpublisher("v3");
+const resend = resendApiKey ? new Resend(resendApiKey) : null;
 
 const routes = {
   "POST /api/verify-company-subscription": verifyCompanySubscription,
   "POST /api/refresh-company-subscription": refreshCompanySubscription,
+  "POST /api/send-compose-email-invite": sendComposeEmailInvite,
 };
 
 const server = http.createServer(async (req, res) => {
@@ -206,6 +215,130 @@ async function refreshCompanySubscription({decodedToken, body}) {
   return {
     statusCode: 200,
     payload: buildResponsePayload(entitlement),
+  };
+}
+
+async function sendComposeEmailInvite({decodedToken, body}) {
+  if (!resend) {
+    throw createHttpError(
+      503,
+      "El backend de correo todavia no esta configurado. Falta RESEND_API_KEY.",
+    );
+  }
+
+  const recipientEmail = String(body.recipientEmail || "").trim().toLowerCase();
+  const subject = String(body.subject || "").trim();
+  const messageBody = String(body.body || "").trim();
+  const attachmentNames = Array.isArray(body.attachmentNames) ?
+    body.attachmentNames.map((value) => String(value || "").trim()).filter(Boolean) :
+    [];
+
+  if (!isValidEmail(recipientEmail)) {
+    throw createHttpError(400, "Debes indicar un correo externo valido.");
+  }
+
+  if (!messageBody && attachmentNames.length === 0) {
+    throw createHttpError(400, "No hay contenido para enviar.");
+  }
+
+  const existingUserSnap = await db
+      .collection("users")
+      .where("email", "==", recipientEmail)
+      .limit(1)
+      .get();
+  if (!existingUserSnap.empty) {
+    throw createHttpError(
+      409,
+      "Ese correo ya pertenece a un usuario de Messeya. Envialo como mensaje interno.",
+    );
+  }
+
+  const senderSnap = await db.collection("users").doc(decodedToken.uid).get();
+  const senderData = senderSnap.data() || {};
+  const senderName = String(
+      senderData.name || decodedToken.name || "Un contacto de Messeya",
+  ).trim();
+  const senderUsername = String(senderData.username || "").trim();
+  const senderEmail = String(
+      senderData.email || decodedToken.email || "",
+  ).trim().toLowerCase();
+  const subjectLine = subject || `Nuevo mensaje de ${senderName} en Messeya`;
+  const invitationRef = db.collection("email_invitations").doc();
+  const createdAt = admin.firestore.FieldValue.serverTimestamp();
+
+  await invitationRef.set({
+    id: invitationRef.id,
+    type: "compose_external_email",
+    recipientEmail,
+    recipientEmailLower: recipientEmail,
+    senderUid: decodedToken.uid,
+    senderName,
+    senderUsername,
+    senderEmail,
+    subject,
+    body: messageBody,
+    attachmentNames,
+    installUrl: playStoreUrl,
+    status: "pending",
+    createdAt,
+    updatedAt: createdAt,
+  });
+
+  const senderHandle = senderUsername ? `@${senderUsername}` : senderEmail;
+  const attachmentNote = attachmentNames.length > 0 ?
+    `<p style="margin:16px 0 0;color:#4b5563;font-size:14px;">Adjuntos disponibles al instalar la app: ${escapeHtml(attachmentNames.join(", "))}.</p>` :
+    "";
+  const html = `
+    <div style="font-family:Arial,sans-serif;background:#f5f7fb;padding:32px;">
+      <div style="max-width:620px;margin:0 auto;background:#ffffff;border-radius:20px;padding:32px;color:#111827;">
+        <p style="margin:0 0 12px;font-size:14px;color:#6b7280;">Mensaje enviado desde Messeya</p>
+        <h1 style="margin:0 0 12px;font-size:28px;line-height:1.2;">${escapeHtml(subjectLine)}</h1>
+        <p style="margin:0 0 20px;font-size:16px;color:#374151;">
+          <strong>${escapeHtml(senderName)}</strong>${senderHandle ? ` (${escapeHtml(senderHandle)})` : ""} te envio un mensaje desde Messeya.
+        </p>
+        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:16px;padding:20px;font-size:16px;line-height:1.6;white-space:pre-wrap;">${escapeHtml(messageBody || "Hay contenido disponible para ti en Messeya.")}</div>
+        ${attachmentNote}
+        <div style="margin-top:28px;">
+          <a href="${escapeHtml(playStoreUrl)}" style="display:inline-block;background:#2563eb;color:#ffffff;text-decoration:none;padding:14px 22px;border-radius:12px;font-weight:700;">Abrir en Messeya</a>
+        </div>
+        <p style="margin:20px 0 0;color:#6b7280;font-size:14px;">Instala la app para responder, ver los adjuntos y mantener la conversacion.</p>
+      </div>
+    </div>
+  `;
+  const text = [
+    `${senderName}${senderHandle ? ` (${senderHandle})` : ""} te envio un mensaje desde Messeya.`,
+    "",
+    subjectLine,
+    "",
+    messageBody || "Hay contenido disponible para ti en Messeya.",
+    attachmentNames.length > 0 ?
+      `Adjuntos disponibles al instalar la app: ${attachmentNames.join(", ")}.` :
+      "",
+    "",
+    `Instala la app: ${playStoreUrl}`,
+  ].filter(Boolean).join("\n");
+
+  const emailResult = await resend.emails.send({
+    from: resendFromEmail,
+    to: [recipientEmail],
+    subject: subjectLine,
+    html,
+    text,
+  });
+
+  await invitationRef.set({
+    status: "sent",
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+    resendEmailId: emailResult.data?.id || "",
+  }, {merge: true});
+
+  return {
+    statusCode: 200,
+    payload: {
+      ok: true,
+      invitationId: invitationRef.id,
+      recipientEmail,
+    },
   };
 }
 
@@ -412,6 +545,19 @@ function createHttpError(statusCode, message) {
   const error = new Error(message);
   error.statusCode = statusCode;
   return error;
+}
+
+function isValidEmail(value) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(String(value || "").trim());
+}
+
+function escapeHtml(value) {
+  return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
 }
 
 function sendJson(res, statusCodeOrPayload, maybePayload) {

@@ -9,6 +9,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'package:stream_chat_flutter_core/stream_chat_flutter_core.dart' as stream;
 
+import '../../../core/config/backend_config.dart';
 import '../../../core/config/push_config.dart';
 import '../../../core/firebase/firebase_providers.dart';
 import '../../../core/services/cloudinary_media_service.dart';
@@ -670,6 +671,74 @@ class MessagesRepository {
       }
     } catch (error) {
       debugPrint('No se pudo avisar al backend de push: $error');
+    }
+  }
+
+  Future<void> sendExternalInvitationEmail({
+    required String recipientEmail,
+    required String subject,
+    required String body,
+    required List<File> files,
+  }) async {
+    final user = _auth.currentUser;
+    if (user == null) {
+      throw StateError('No hay una sesion activa para enviar la invitacion.');
+    }
+
+    if (!BackendConfig.hasApiBaseUrl) {
+      throw StateError(
+        'No hay backend configurado para enviar invitaciones por correo.',
+      );
+    }
+
+    final normalizedEmail = recipientEmail.trim().toLowerCase();
+    if (normalizedEmail.isEmpty) {
+      throw StateError('Debes indicar un correo valido.');
+    }
+
+    try {
+      final idToken = await user.getIdToken();
+      final response = await http
+          .post(
+            BackendConfig.buildUri('/api/send-compose-email-invite'),
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': 'Bearer $idToken',
+            },
+            body: jsonEncode({
+              'recipientEmail': normalizedEmail,
+              'subject': subject.trim(),
+              'body': body.trim(),
+              'attachmentNames': files
+                  .map((file) => path.basename(file.path))
+                  .toList(),
+            }),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        String message = 'No se pudo enviar la invitacion por correo.';
+        try {
+          final payload = jsonDecode(response.body) as Map<String, dynamic>;
+          final serverMessage = payload['error']?.toString().trim() ?? '';
+          if (serverMessage.isNotEmpty) {
+            message = serverMessage;
+          }
+        } catch (_) {
+          if (response.body.trim().isNotEmpty) {
+            message = response.body.trim();
+          }
+        }
+        throw StateError(message);
+      }
+    } on TimeoutException {
+      throw StateError(
+        'El backend tardo demasiado en enviar la invitacion por correo.',
+      );
+    } on StateError {
+      rethrow;
+    } catch (error) {
+      throw StateError('No se pudo enviar la invitacion por correo: $error');
     }
   }
 }

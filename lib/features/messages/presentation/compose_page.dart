@@ -31,6 +31,7 @@ class _ComposePageState extends ConsumerState<ComposePage> {
   final _searchController = TextEditingController();
   
   final List<AppUser> _selectedUsers = [];
+  final List<String> _selectedExternalEmails = [];
   List<AppUser> _searchResults = [];
   final List<File> _attachedFiles = [];
   bool _isSearching = false;
@@ -56,6 +57,14 @@ class _ComposePageState extends ConsumerState<ComposePage> {
         for (var i = 0; i < draft.recipientIds.length; i++) {
           final uid = draft.recipientIds[i];
           final name = draft.recipientNames[i];
+
+          if (uid.startsWith('ext:')) {
+            final email = uid.substring(4).trim();
+            if (email.isNotEmpty) {
+              _selectedExternalEmails.add(email);
+            }
+            continue;
+          }
           
           _selectedUsers.add(AppUser(
             uid: uid,
@@ -80,13 +89,22 @@ class _ComposePageState extends ConsumerState<ComposePage> {
     final subject = _subjectController.text.trim();
     final text = _messageController.text.trim();
     
-    if (subject.isNotEmpty || text.isNotEmpty || _selectedUsers.isNotEmpty) {
+    if (subject.isNotEmpty ||
+        text.isNotEmpty ||
+        _selectedUsers.isNotEmpty ||
+        _selectedExternalEmails.isNotEmpty) {
       final draft = Draft(
         id: _currentDraftId ?? DateTime.now().millisecondsSinceEpoch.toString(),
         subject: subject,
         text: text,
-        recipientIds: _selectedUsers.map((u) => u.uid).toList(),
-        recipientNames: _selectedUsers.map((u) => u.name).toList(),
+        recipientIds: [
+          ..._selectedUsers.map((u) => u.uid),
+          ..._selectedExternalEmails.map((email) => 'ext:$email'),
+        ],
+        recipientNames: [
+          ..._selectedUsers.map((u) => u.name),
+          ..._selectedExternalEmails,
+        ],
         updatedAt: DateTime.now(),
       );
       await ref.read(draftsRepositoryProvider).saveDraft(draft);
@@ -155,7 +173,7 @@ class _ComposePageState extends ConsumerState<ComposePage> {
   }
 
   Future<void> _sendBroadcast() async {
-    if (_selectedUsers.isEmpty ||
+    if ((_selectedUsers.isEmpty && _selectedExternalEmails.isEmpty) ||
         (_messageController.text.isEmpty && _attachedFiles.isEmpty)) {
       return;
     }
@@ -198,13 +216,28 @@ class _ComposePageState extends ConsumerState<ComposePage> {
         }
       }
 
+      for (final email in _selectedExternalEmails) {
+        await repo.sendExternalInvitationEmail(
+          recipientEmail: email,
+          subject: _subjectController.text,
+          body: _messageController.text,
+          files: _attachedFiles,
+        );
+      }
+
       if (_currentDraftId != null) {
         await ref.read(draftsRepositoryProvider).deleteDraft(_currentDraftId!);
       }
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Mensajes enviados correctamente')),
+        SnackBar(
+          content: Text(
+            _selectedExternalEmails.isEmpty
+                ? 'Mensajes enviados correctamente'
+                : 'Mensajes enviados. Las invitaciones externas salieron por correo.',
+          ),
+        ),
       );
       context.pop();
     } on TimeoutException catch (error) {
@@ -275,6 +308,17 @@ class _ComposePageState extends ConsumerState<ComposePage> {
                     backgroundColor: Colors.blue.withValues(alpha: 0.18),
                     label: Text(u.name, style: TextStyle(color: primaryTextColor)),
                     onDeleted: () => setState(() => _selectedUsers.remove(u)),
+                    deleteIconColor: mutedTextColor,
+                  )),
+                  ..._selectedExternalEmails.map((email) => Chip(
+                    backgroundColor: Colors.orange.withValues(alpha: 0.18),
+                    avatar: const Icon(
+                      Icons.mail_outline_rounded,
+                      size: 16,
+                      color: Colors.orange,
+                    ),
+                    label: Text(email, style: TextStyle(color: primaryTextColor)),
+                    onDeleted: () => setState(() => _selectedExternalEmails.remove(email)),
                     deleteIconColor: mutedTextColor,
                   )),
                   ActionChip(
@@ -377,7 +421,7 @@ class _ComposePageState extends ConsumerState<ComposePage> {
                 autofocus: true,
                 style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
                 decoration: InputDecoration(
-                  hintText: 'Buscar usuario...',
+                  hintText: 'Buscar usuario o escribir correo...',
                   hintStyle: TextStyle(color: MesseyaUi.textMutedFor(context)),
                   prefixIcon: const Icon(Icons.search, color: Colors.blue),
                   filled: true,
@@ -391,33 +435,94 @@ class _ComposePageState extends ConsumerState<ComposePage> {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: _isSearching 
-                  ? const Center(child: CircularProgressIndicator())
-                  : ListView.builder(
-                      itemCount: _searchResults.length,
-                      itemBuilder: (context, index) {
-                        final user = _searchResults[index];
-                        final isSelected = _selectedUsers.any((u) => u.uid == user.uid);
-                        return ListTile(
-                          leading: UserAvatar(photoUrl: user.photoUrl, name: user.name),
-                          title: Text(
-                            user.name,
-                            style: TextStyle(color: MesseyaUi.textPrimaryFor(context)),
-                          ),
-                          subtitle: Text(
-                            '@${user.username}',
-                            style: TextStyle(color: MesseyaUi.textMutedFor(context)),
-                          ),
-                          trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.blue) : null,
-                          onTap: () => _showUserInfo(user),
-                        );
-                      },
-                    ),
+                child: _isSearching
+                    ? const Center(child: CircularProgressIndicator())
+                    : ListView(
+                        children: [
+                          if (_canUseAsExternalEmail(_searchController.text) &&
+                              !_hasInternalExactEmail(_searchController.text) &&
+                              !_selectedExternalEmails.contains(
+                                _searchController.text.trim().toLowerCase(),
+                              ))
+                            ListTile(
+                              leading: const CircleAvatar(
+                                backgroundColor: Colors.orange,
+                                child: Icon(
+                                  Icons.mail_rounded,
+                                  color: Colors.white,
+                                ),
+                              ),
+                              title: Text(
+                                'Enviar por correo a ${_searchController.text.trim().toLowerCase()}',
+                                style: TextStyle(
+                                  color: MesseyaUi.textPrimaryFor(context),
+                                ),
+                              ),
+                              subtitle: Text(
+                                'Se enviara una invitacion para instalar Messeya',
+                                style: TextStyle(
+                                  color: MesseyaUi.textMutedFor(context),
+                                ),
+                              ),
+                              onTap: () {
+                                setState(() {
+                                  _selectedExternalEmails.add(
+                                    _searchController.text.trim().toLowerCase(),
+                                  );
+                                });
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ..._searchResults.map((user) {
+                            final isSelected =
+                                _selectedUsers.any((u) => u.uid == user.uid);
+                            return ListTile(
+                              leading: UserAvatar(
+                                photoUrl: user.photoUrl,
+                                name: user.name,
+                              ),
+                              title: Text(
+                                user.name,
+                                style: TextStyle(
+                                  color: MesseyaUi.textPrimaryFor(context),
+                                ),
+                              ),
+                              subtitle: Text(
+                                '@${user.username}',
+                                style: TextStyle(
+                                  color: MesseyaUi.textMutedFor(context),
+                                ),
+                              ),
+                              trailing: isSelected
+                                  ? const Icon(
+                                      Icons.check_circle,
+                                      color: Colors.blue,
+                                    )
+                                  : null,
+                              onTap: () => _showUserInfo(user),
+                            );
+                          }),
+                        ],
+                      ),
               ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  bool _canUseAsExternalEmail(String value) {
+    final trimmed = value.trim().toLowerCase();
+    if (trimmed.isEmpty) return false;
+    final emailRegex = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+    return emailRegex.hasMatch(trimmed);
+  }
+
+  bool _hasInternalExactEmail(String value) {
+    final trimmed = value.trim().toLowerCase();
+    return _searchResults.any(
+      (user) => user.email.trim().toLowerCase() == trimmed,
     );
   }
 
